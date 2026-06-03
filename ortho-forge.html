@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORTHO FORGE :: Orthographic Projection Trainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --navy:#050a14; --panel:#0a1424; --panel2:#0d1b30; --line:#15324a;
+    --cyan:#22d3ee; --cyan-d:#0e7490; --cyan-bright:#67e8f9;
+    --purple:#a855f7; --amber:#fbbf24; --green:#34d399; --red:#fb7185;
+    --txt:#cfe8f3; --txt-dim:#7fa6bd; --txt-faint:#4d7186;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--navy); color:var(--txt);
+    font-family:'Rajdhani',sans-serif; font-size:16px; overflow:hidden;
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(34,211,238,.08), transparent 45%),
+      radial-gradient(circle at 90% 100%, rgba(168,85,247,.09), transparent 45%);
+  }
+  /* scanline overlay */
+  body::after{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:9999;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,0,0,.10) 3px, rgba(0,0,0,0) 4px);
+    mix-blend-mode:overlay; opacity:.5;
+  }
+  h1,h2,h3,.font-disp{font-family:'Orbitron',sans-serif;letter-spacing:.04em}
+  .mono{font-family:'JetBrains Mono',monospace}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:#06101e}
+  ::-webkit-scrollbar-thumb{background:var(--cyan-d);border-radius:6px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--cyan)}
+
+  /* ---------- LAYOUT ---------- */
+  #app{display:flex;flex-direction:column;height:100vh}
+  header.bar{
+    display:flex;align-items:center;gap:18px;padding:10px 18px;
+    background:linear-gradient(90deg,#08111f,#0a1830);
+    border-bottom:1px solid var(--line); position:relative; z-index:5;
+    box-shadow:0 2px 20px rgba(0,0,0,.6);
+  }
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo .glyph{
+    width:40px;height:40px;border:2px solid var(--cyan);border-radius:7px;position:relative;
+    box-shadow:0 0 14px rgba(34,211,238,.5), inset 0 0 10px rgba(34,211,238,.18);
+  }
+  .logo .glyph::before,.logo .glyph::after{content:"";position:absolute;background:var(--cyan);opacity:.85}
+  .logo .glyph::before{left:50%;top:4px;bottom:4px;width:2px;transform:translateX(-50%)}
+  .logo .glyph::after{top:50%;left:4px;right:4px;height:2px;transform:translateY(-50%)}
+  .logo h1{font-size:20px;font-weight:900;color:#eafcff;text-shadow:0 0 12px rgba(34,211,238,.55)}
+  .logo .sub{font-size:11px;color:var(--txt-faint);letter-spacing:.22em;text-transform:uppercase;font-family:'JetBrains Mono'}
+  .head-spacer{flex:1}
+  .progress-wrap{display:flex;align-items:center;gap:10px;min-width:230px}
+  .progress-wrap .lbl{font-size:11px;color:var(--txt-dim);letter-spacing:.15em;text-transform:uppercase}
+  .pbar{flex:1;height:8px;background:#0c1c30;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .pbar > i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--purple));transition:width .5s;box-shadow:0 0 10px var(--cyan)}
+  .verse{font-size:11px;color:var(--txt-faint);font-style:italic;max-width:260px;line-height:1.3;border-left:2px solid var(--purple);padding-left:10px}
+
+  /* lab nav */
+  nav.labs{
+    display:flex;gap:6px;padding:9px 14px;background:#070f1c;border-bottom:1px solid var(--line);
+    overflow-x:auto; z-index:4;
+  }
+  nav.labs button{
+    flex:0 0 auto;background:#0c1726;border:1px solid var(--line);color:var(--txt-dim);
+    padding:6px 13px;border-radius:6px;cursor:pointer;font-family:'Rajdhani';font-weight:600;font-size:13px;
+    letter-spacing:.03em;transition:.18s;white-space:nowrap;display:flex;align-items:center;gap:7px;
+  }
+  nav.labs button .n{font-family:'JetBrains Mono';font-size:11px;color:var(--txt-faint);background:#0a1422;border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  nav.labs button:hover{border-color:var(--cyan-d);color:var(--txt)}
+  nav.labs button.active{background:linear-gradient(180deg,#0e2c3d,#0a2030);border-color:var(--cyan);color:#eafcff;box-shadow:0 0 12px rgba(34,211,238,.3)}
+  nav.labs button.active .n{border-color:var(--cyan);color:var(--cyan)}
+  nav.labs button.done .n{background:var(--green);color:#04231a;border-color:var(--green)}
+
+  main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:0;min-height:0}
+  .pane{min-height:0;display:flex;flex-direction:column;overflow:hidden}
+  .pane.left{border-right:1px solid var(--line);background:linear-gradient(180deg,#06101e,#050b15)}
+  .pane.right{background:#070e1a}
+  .pane-head{
+    display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);
+    background:#08121f; flex:0 0 auto;
+  }
+  .pane-head .tag{font-family:'JetBrains Mono';font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--navy);background:var(--cyan);padding:3px 8px;border-radius:4px;font-weight:700}
+  .pane.right .pane-head .tag{background:var(--amber)}
+  .pane-head h2{font-size:14px;font-weight:700;color:#dff6ff}
+  .pane-body{flex:1;overflow:auto;padding:16px}
+
+  /* ---------- VIEWPORT ---------- */
+  #viewport{
+    position:relative;width:100%;height:340px;border:1px solid var(--line);border-radius:10px;
+    background:radial-gradient(circle at 50% 35%, #0a1626, #050b14);overflow:hidden;flex:0 0 auto;
+    box-shadow:inset 0 0 40px rgba(0,0,0,.6);
+  }
+  #viewport canvas{display:block;width:100%;height:100%}
+  .vp-badge{position:absolute;top:8px;left:10px;font-family:'JetBrains Mono';font-size:10px;color:var(--cyan-bright);letter-spacing:.15em;text-shadow:0 0 8px rgba(34,211,238,.6);pointer-events:none}
+  .vp-hint{position:absolute;bottom:8px;left:10px;font-size:11px;color:var(--txt-faint);pointer-events:none}
+  .axis-key{position:absolute;top:8px;right:10px;font-family:'JetBrains Mono';font-size:10px;text-align:right;line-height:1.5;pointer-events:none}
+  .axis-key .x{color:#fb7185}.axis-key .y{color:#34d399}.axis-key .z{color:#60a5fa}
+
+  /* controls */
+  .controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+  .ctl{display:flex;align-items:center;gap:7px;background:#0b1727;border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--txt-dim)}
+  .ctl select{background:#08111f;color:var(--txt);border:1px solid var(--line);border-radius:5px;padding:4px 6px;font-family:'Rajdhani';font-weight:600;font-size:13px;outline:none}
+  .toggle{cursor:pointer;user-select:none;transition:.15s}
+  .toggle .sw{width:34px;height:18px;border-radius:10px;background:#0a1422;border:1px solid var(--line);position:relative;transition:.2s}
+  .toggle .sw::after{content:"";position:absolute;top:1px;left:1px;width:14px;height:14px;border-radius:50%;background:var(--txt-faint);transition:.2s}
+  .toggle.on .sw{background:rgba(34,211,238,.25);border-color:var(--cyan)}
+  .toggle.on .sw::after{left:17px;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+  .toggle.on{color:var(--cyan-bright)}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:6px;background:#0a1422;border:1px solid var(--line);border-radius:5px;outline:none;width:120px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--cyan);cursor:pointer;box-shadow:0 0 8px var(--cyan)}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border:none;border-radius:50%;background:var(--cyan);cursor:pointer}
+  .btn{background:linear-gradient(180deg,#0e2c3d,#0a2030);border:1px solid var(--cyan-d);color:var(--cyan-bright);padding:6px 13px;border-radius:7px;cursor:pointer;font-family:'Rajdhani';font-weight:700;font-size:13px;letter-spacing:.04em;transition:.15s}
+  .btn:hover{border-color:var(--cyan);box-shadow:0 0 12px rgba(34,211,238,.35)}
+  .btn.amber{background:linear-gradient(180deg,#3a2a06,#241a04);border-color:#a16207;color:var(--amber)}
+  .btn.amber:hover{border-color:var(--amber);box-shadow:0 0 12px rgba(251,191,36,.3)}
+  .btn.ghost{background:transparent;border-color:var(--line);color:var(--txt-dim)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+
+  /* the three projected views */
+  .views-block{margin-top:16px}
+  .views-block .vh{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .views-block .vh h3{font-size:13px;color:var(--amber);letter-spacing:.1em}
+  .views-block .vh .badge{font-family:'JetBrains Mono';font-size:9px;color:var(--txt-faint);border:1px solid var(--line);padding:1px 6px;border-radius:4px;letter-spacing:.12em}
+  /* third-angle T-layout: top above front, side to the right of front */
+  .ortho-grid{display:grid;grid-template-columns:160px 160px;grid-template-rows:160px 160px;gap:10px;justify-content:start}
+  .ov{position:relative;border:1px solid var(--line);border-radius:8px;background:#06101c;overflow:hidden}
+  .ov canvas{display:block;width:100%;height:100%}
+  .ov .vlabel{position:absolute;top:5px;left:7px;font-family:'JetBrains Mono';font-size:9px;letter-spacing:.14em;color:var(--cyan-bright);text-transform:uppercase}
+  .ov .vdim{position:absolute;bottom:4px;right:6px;font-family:'JetBrains Mono';font-size:9px;color:var(--txt-faint)}
+  .ov-top{grid-column:1;grid-row:1}
+  .ov-front{grid-column:1;grid-row:2}
+  .ov-side{grid-column:2;grid-row:2}
+  .ov-empty{grid-column:2;grid-row:1;border:1px dashed var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--txt-faint);font-size:10px;font-family:'JetBrains Mono';opacity:.6;padding:6px}
+
+  /* checklist / tasks (left practice) */
+  .task{margin-top:18px;background:linear-gradient(180deg,#0a1727,#081320);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .task .th{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+  .task .th .ic{width:24px;height:24px;border-radius:6px;background:rgba(251,191,36,.13);border:1px solid #a16207;display:flex;align-items:center;justify-content:center;color:var(--amber);font-size:14px}
+  .task .th h3{font-size:14px;color:#ffe9b8;letter-spacing:.05em}
+  .checklist{list-style:none;display:flex;flex-direction:column;gap:9px}
+  .checklist li{display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;color:var(--txt-dim);padding:6px 8px;border-radius:7px;transition:.15s}
+  .checklist li:hover{background:#0c1a2b}
+  .checklist li .ck{flex:0 0 auto;width:20px;height:20px;border:1.5px solid var(--cyan-d);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;color:transparent;transition:.15s;margin-top:1px}
+  .checklist li.checked .ck{background:var(--cyan);border-color:var(--cyan);color:var(--navy);box-shadow:0 0 8px var(--cyan)}
+  .checklist li.checked{color:var(--txt)}
+
+  /* quiz / choice tasks */
+  .qopts{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin-top:6px}
+  .qopt{position:relative;border:1.5px solid var(--line);border-radius:10px;background:#06101c;cursor:pointer;overflow:hidden;transition:.15s;padding:0}
+  .qopt:hover{border-color:var(--cyan-d);transform:translateY(-2px)}
+  .qopt img{display:block;width:100%;height:120px;object-fit:contain;background:#050c16}
+  .qopt .cap{font-family:'JetBrains Mono';font-size:11px;text-align:center;padding:6px;color:var(--txt-dim);border-top:1px solid var(--line)}
+  .qopt.correct{border-color:var(--green);box-shadow:0 0 16px rgba(52,211,153,.4)}
+  .qopt.wrong{border-color:var(--red);box-shadow:0 0 16px rgba(251,113,133,.35)}
+  .qopt .mark{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;display:none;align-items:center;justify-content:center;font-weight:900;font-size:15px}
+  .qopt.correct .mark{display:flex;background:var(--green);color:#04231a}
+  .qopt.wrong .mark{display:flex;background:var(--red);color:#2a0410}
+  .feedback{margin-top:14px;padding:12px 14px;border-radius:9px;font-size:14px;display:none;line-height:1.5}
+  .feedback.ok{display:block;background:rgba(52,211,153,.1);border:1px solid var(--green);color:#bff5e3}
+  .feedback.no{display:block;background:rgba(251,113,133,.1);border:1px solid var(--red);color:#ffd5dc}
+
+  /* ---------- RIGHT PANE (target + steps) ---------- */
+  .lead{font-size:15px;line-height:1.6;color:var(--txt)}
+  .lead b{color:var(--cyan-bright)}
+  .target-card{margin:4px 0 18px;border:1px solid var(--amber);border-radius:12px;background:linear-gradient(180deg,#1a1404,#0e0b03);padding:16px;position:relative;overflow:hidden}
+  .target-card::before{content:"TARGET";position:absolute;top:10px;right:14px;font-family:'JetBrains Mono';font-size:10px;letter-spacing:.2em;color:#a16207}
+  .target-card h3{font-size:15px;color:var(--amber);margin-bottom:6px}
+  .target-card p{font-size:14px;color:#e9d6a8;line-height:1.5}
+
+  .steps{display:flex;flex-direction:column;gap:14px;margin-top:8px}
+  .step{display:flex;gap:14px;background:linear-gradient(180deg,#0a1626,#07111e);border:1px solid var(--line);border-radius:11px;padding:14px;position:relative}
+  .step .num{flex:0 0 auto;width:30px;height:30px;border-radius:8px;background:linear-gradient(180deg,#0e2c3d,#0a2030);border:1px solid var(--cyan-d);color:var(--cyan-bright);font-family:'Orbitron';font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px rgba(34,211,238,.25)}
+  .step .sbody{flex:1;min-width:0}
+  .step .sbody h4{font-size:14px;color:#dff6ff;margin-bottom:5px;letter-spacing:.03em}
+  .step .sbody p{font-size:14px;color:var(--txt-dim);line-height:1.55}
+  .step .sbody p b{color:var(--cyan-bright)}
+  .step .svg-wrap{margin-top:10px;background:#050c16;border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;justify-content:center}
+  .step svg{max-width:100%;height:auto}
+
+  .career{margin-top:18px;border:1px solid var(--purple);border-radius:12px;background:linear-gradient(180deg,#150a26,#0c0716);padding:14px 16px}
+  .career h3{font-size:13px;color:#d8b4fe;letter-spacing:.1em;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .career .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-size:12px;font-weight:600;color:#e9d5ff;background:rgba(168,85,247,.14);border:1px solid #7e22ce;border-radius:20px;padding:4px 11px}
+  .career p{font-size:13.5px;color:#cbb6e0;line-height:1.55;margin-top:10px}
+
+  .callout{margin-top:14px;border-left:3px solid var(--cyan);background:rgba(34,211,238,.06);padding:11px 14px;border-radius:0 8px 8px 0;font-size:13.5px;line-height:1.5;color:var(--txt)}
+  .callout b{color:var(--cyan-bright)}
+
+  .bridge{margin-top:18px;border:1px solid var(--green);border-radius:12px;background:linear-gradient(180deg,#04231a,#04150f);padding:16px}
+  .bridge h3{font-size:14px;color:var(--green);margin-bottom:8px;letter-spacing:.05em}
+  .bridge p{font-size:14px;color:#bff5e3;line-height:1.55}
+  .bridge .tools{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+  .tool{flex:1;min-width:160px;background:#06150f;border:1px solid #0f3b2c;border-radius:9px;padding:11px 13px}
+  .tool h4{font-size:13px;color:var(--green);margin-bottom:4px}
+  .tool p{font-size:12.5px;color:#9fd9c5}
+
+  .nav-foot{display:flex;justify-content:space-between;gap:10px;margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+
+  /* ---------- EVALUATION ---------- */
+  .eval-q{background:linear-gradient(180deg,#0a1626,#07111e);border:1px solid var(--line);border-radius:11px;padding:15px 16px;margin-bottom:14px}
+  .eval-q .qn{font-family:'JetBrains Mono';font-size:11px;color:var(--amber);letter-spacing:.12em}
+  .eval-q h4{font-size:15px;color:#dff6ff;margin:6px 0 12px;line-height:1.4}
+  .eval-q .opts{display:flex;flex-direction:column;gap:8px}
+  .eval-opt{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;font-size:14px;color:var(--txt-dim);transition:.13s}
+  .eval-opt:hover{border-color:var(--cyan-d);color:var(--txt)}
+  .eval-opt .dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--cyan-d);flex:0 0 auto}
+  .eval-opt.sel{border-color:var(--cyan);color:#dff6ff;background:rgba(34,211,238,.07)}
+  .eval-opt.sel .dot{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+  .eval-opt.right{border-color:var(--green);color:#bff5e3;background:rgba(52,211,153,.08)}
+  .eval-opt.right .dot{background:var(--green);border-color:var(--green)}
+  .eval-opt.bad{border-color:var(--red);color:#ffd5dc}
+  .eval-opt.bad .dot{background:var(--red);border-color:var(--red)}
+  .eval-q .ex{margin-top:11px;font-size:13px;color:var(--txt-dim);border-left:2px solid var(--cyan-d);padding-left:10px;display:none;line-height:1.5}
+  .eval-q.answered .ex{display:block}
+
+  .scorecard{text-align:center;padding:30px 20px;border:1px solid var(--cyan);border-radius:14px;background:radial-gradient(circle at 50% 0%,#0e2335,#070f1c);margin-top:10px;display:none}
+  .scorecard.show{display:block;animation:pop .4s ease}
+  @keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+  .scorecard .ring{width:130px;height:130px;margin:0 auto 14px;position:relative}
+  .scorecard .pct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .scorecard .pct b{font-family:'Orbitron';font-size:34px;color:var(--cyan-bright);text-shadow:0 0 14px rgba(34,211,238,.6)}
+  .scorecard .pct span{font-size:11px;color:var(--txt-dim);letter-spacing:.18em}
+  .scorecard h2{font-size:22px;color:#eafcff;margin-bottom:6px}
+  .scorecard p{font-size:14px;color:var(--txt-dim);max-width:420px;margin:0 auto 6px;line-height:1.5}
+  .rank{font-family:'Orbitron';font-weight:700;font-size:16px;letter-spacing:.05em;margin:8px 0}
+
+  .empty-note{color:var(--txt-faint);font-size:13px;font-style:italic;padding:6px 0}
+  .intro-hero{border:1px solid var(--line);border-radius:12px;background:linear-gradient(135deg,#0a1830,#070f1c);padding:18px;margin-bottom:16px;position:relative;overflow:hidden}
+  .intro-hero h3{font-size:16px;color:var(--cyan-bright);margin-bottom:8px}
+  .intro-hero p{font-size:14.5px;color:var(--txt);line-height:1.6}
+
+  @media (max-width:1100px){
+    main{grid-template-columns:1fr;overflow:auto}
+    .pane{overflow:visible}
+    .pane.left{border-right:none;border-bottom:1px solid var(--line)}
+    .pane-body{overflow:visible}
+    #viewport{height:300px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <div class="logo">
+      <div class="glyph"></div>
+      <div>
+        <h1>ORTHO&nbsp;FORGE</h1>
+        <div class="sub">Orthographic Projection Trainer</div>
+      </div>
+    </div>
+    <div class="head-spacer"></div>
+    <div class="verse">"By wisdom a house is built, and through understanding it is established." — Proverbs 24:3</div>
+    <div class="progress-wrap">
+      <span class="lbl">Progress</span>
+      <div class="pbar"><i id="pbar"></i></div>
+      <span class="mono" id="pcount" style="font-size:12px;color:var(--cyan-bright)">0/10</span>
+    </div>
+  </header>
+
+  <nav class="labs" id="labnav"></nav>
+
+  <main>
+    <section class="pane left">
+      <div class="pane-head">
+        <span class="tag">Practice</span>
+        <h2 id="leftTitle">The Glass Box</h2>
+      </div>
+      <div class="pane-body">
+        <div id="viewport">
+          <div class="vp-badge">3D LIVE SANDBOX</div>
+          <div class="axis-key"><span class="x">X · width</span><br><span class="y">Y · height</span><br><span class="z">Z · depth</span></div>
+          <div class="vp-hint">drag to rotate · scroll to zoom</div>
+        </div>
+
+        <div class="controls">
+          <label class="ctl">Object
+            <select id="objSelect"></select>
+          </label>
+          <div class="ctl toggle on" id="tgBox"><span>Glass Box</span><span class="sw"></span></div>
+          <div class="ctl toggle" id="tgRays"><span>Projector Rays</span><span class="sw"></span></div>
+          <div class="ctl toggle" id="tgWire"><span>Wireframe</span><span class="sw"></span></div>
+          <div class="ctl toggle" id="tgSpin"><span>Auto-spin</span><span class="sw"></span></div>
+          <label class="ctl" style="gap:10px">Unfold
+            <input type="range" id="unfold" min="0" max="100" value="0">
+          </label>
+          <button class="btn ghost" id="resetView">Reset</button>
+        </div>
+
+        <div class="views-block">
+          <div class="vh">
+            <h3>PROJECTED VIEWS</h3>
+            <span class="badge" id="angleBadge">THIRD-ANGLE (AU)</span>
+            <button class="btn ghost" id="angleToggle" style="padding:3px 9px;font-size:11px">switch to first-angle</button>
+          </div>
+          <div class="ortho-grid" id="orthoGrid">
+            <div class="ov ov-top"><div class="vlabel">TOP / PLAN</div><canvas id="cvTop"></canvas><div class="vdim" id="dimTop"></div></div>
+            <div class="ov-empty" id="ovEmpty">In third-angle (Australian standard) the TOP view sits directly above the FRONT view.</div>
+            <div class="ov ov-front"><div class="vlabel">FRONT / ELEVATION</div><canvas id="cvFront"></canvas><div class="vdim" id="dimFront"></div></div>
+            <div class="ov ov-side"><div class="vlabel">RIGHT SIDE</div><canvas id="cvSide"></canvas><div class="vdim" id="dimSide"></div></div>
+          </div>
+        </div>
+
+        <div id="taskArea"></div>
+      </div>
+    </section>
+
+    <section class="pane right">
+      <div class="pane-head">
+        <span class="tag">Build &amp; Learn</span>
+        <h2 id="rightTitle">Final Product · Step-by-step</h2>
+      </div>
+      <div class="pane-body" id="rightBody"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* =========================================================================
+   ORTHO FORGE — single-file courseware.  Two render contexts only:
+   (1) main viewport  (2) one shared offscreen renderer for ortho views +
+   quiz thumbnails. Built for Year 9/10 Digital Technologies.
+   ========================================================================= */
+(function(){
+'use strict';
+const T = window.THREE;
+const FIT = 3.2;                 // objects normalised to fit this cube
+const ORTHO_HALF = FIT*0.62;     // half-size of ortho camera frustum
+const COL = { bg:0x050b14, fill:0x22d3ee, edge:0x67e8f9, box:0x1f6f7a,
+              ray:0xfbbf24, top:0x34d399 };
+
+/* ---------------------------------------------------------------------------
+   1. GEOMETRY BUILDERS  -> each returns array of {geo, pos?, rot?}
+--------------------------------------------------------------------------- */
+function box(w,h,d){ return new T.BoxGeometry(w,h,d); }
+function extrudeShape(shape,depth){
+  const g = new T.ExtrudeGeometry(shape,{depth:depth,bevelEnabled:false,steps:1});
+  g.translate(0,0,-depth/2); return g;
+}
+function lShape(){
+  const s=new T.Shape();
+  s.moveTo(0,0); s.lineTo(2,0); s.lineTo(2,0.7); s.lineTo(0.7,0.7);
+  s.lineTo(0.7,2); s.lineTo(0,2); s.lineTo(0,0);
+  return s;
+}
+function triShape(a,b,c){
+  const s=new T.Shape(); s.moveTo(a[0],a[1]); s.lineTo(b[0],b[1]); s.lineTo(c[0],c[1]); s.lineTo(a[0],a[1]); return s;
+}
+function plateHoleShape(){
+  const s=new T.Shape();
+  s.moveTo(-1.2,-0.8); s.lineTo(1.2,-0.8); s.lineTo(1.2,0.8); s.lineTo(-1.2,0.8); s.lineTo(-1.2,-0.8);
+  const h=new T.Path(); h.absarc(0,0,0.45,0,Math.PI*2,true); s.holes.push(h);
+  return s;
+}
+function carProfile(){
+  const s=new T.Shape();
+  s.moveTo(-2.2,0.25); s.lineTo(2.2,0.25); s.lineTo(2.2,0.75);
+  s.lineTo(1.15,0.75); s.lineTo(0.65,1.35); s.lineTo(-0.75,1.35);
+  s.lineTo(-1.45,0.75); s.lineTo(-2.2,0.75); s.lineTo(-2.2,0.25);
+  return s;
+}
+
+const LIB = {
+  lblock:{ name:'L-Bracket', career:'mechanical / structural',
+    parts:()=>[{geo:extrudeShape(lShape(),1.3)}] },
+  step:{ name:'Stepped Block', career:'tool & die / manufacturing',
+    parts:()=>[ {geo:box(2.4,0.8,1.6),pos:[0,-0.4,0]}, {geo:box(1.2,0.8,1.6),pos:[-0.6,0.4,0]} ] },
+  cyl:{ name:'Cylinder', career:'lathe parts / shafts',
+    parts:()=>[{geo:new T.CylinderGeometry(0.95,0.95,2.2,40)}] },
+  plate:{ name:'Mounting Plate + Hole', career:'CAD drafting',
+    parts:()=>[{geo:extrudeShape(plateHoleShape(),0.45)}] },
+  wedge:{ name:'Ramp / Wedge', career:'product design',
+    parts:()=>[{geo:extrudeShape(triShape([-1.4,-0.8],[1.4,-0.8],[-1.4,1.0]),1.5)}] },
+  house:{ name:'Mini House', career:'architecture',
+    parts:()=>[
+      {geo:box(2.6,1.6,2.0),pos:[0,-0.2,0]},                                   // walls
+      {geo:extrudeShape(triShape([-1.45,0],[1.45,0],[0,1.0]),2.0),pos:[0,0.6,0]}, // gable roof (triangle in front)
+      {geo:box(0.55,0.95,0.12),pos:[0,-0.525,1.0]}                            // door on front face
+    ] },
+  chair:{ name:'Chair', career:'furniture / interior',
+    parts:()=>[
+      {geo:box(1.5,0.22,1.5),pos:[0,0.0,0]},                 // seat
+      {geo:box(1.5,1.4,0.2),pos:[0,0.8,-0.65]},              // back
+      {geo:box(0.18,0.9,0.18),pos:[-0.6,-0.55,-0.6]},
+      {geo:box(0.18,0.9,0.18),pos:[0.6,-0.55,-0.6]},
+      {geo:box(0.18,0.9,0.18),pos:[-0.6,-0.55,0.6]},
+      {geo:box(0.18,0.9,0.18),pos:[0.6,-0.55,0.6]} ] },
+  car:{ name:'Concept Car', career:'automotive design',
+    parts:()=>{
+      const w=[];
+      w.push({geo:extrudeShape(carProfile(),1.7)});
+      const wheel=()=>{ const g=new T.CylinderGeometry(0.5,0.5,0.28,26); g.rotateX(Math.PI/2); return g; };
+      [[1.35,0.9],[1.35,-0.9],[-1.35,0.9],[-1.35,-0.9]].forEach(p=>{
+        w.push({geo:wheel(),pos:[p[0],-0.05,p[1]]});
+      });
+      return w;
+    } }
+};
+
+/* assemble a normalised THREE.Group (centred + scaled to FIT) */
+function assemble(key){
+  const def = LIB[key];
+  const g = new T.Group();
+  def.parts().forEach(p=>{
+    const m = new T.Mesh(p.geo);
+    if(p.pos) m.position.set(p.pos[0],p.pos[1],p.pos[2]);
+    if(p.rot) m.rotation.set(p.rot[0],p.rot[1],p.rot[2]);
+    g.add(m);
+  });
+  // normalise
+  const bb = new T.Box3().setFromObject(g);
+  const size = new T.Vector3(); bb.getSize(size);
+  const ctr  = new T.Vector3(); bb.getCenter(ctr);
+  const scale = FIT / Math.max(size.x,size.y,size.z);
+  g.children.forEach(m=>{ m.position.sub(ctr); m.position.multiplyScalar(scale);
+                          m.scale.multiplyScalar(scale); });
+  g.userData.size = {w:size.x*scale, h:size.y*scale, d:size.z*scale,
+                     rawW:size.x, rawH:size.y, rawD:size.z};
+  return g;
+}
+
+/* ---------------------------------------------------------------------------
+   2. MAIN VIEWPORT
+--------------------------------------------------------------------------- */
+const vp = document.getElementById('viewport');
+const mainRenderer = new T.WebGLRenderer({antialias:true,alpha:true});
+mainRenderer.setPixelRatio(Math.min(devicePixelRatio,2));
+vp.appendChild(mainRenderer.domElement);
+const scene = new T.Scene();
+const camera = new T.PerspectiveCamera(42,1,0.1,100);
+scene.add(new T.AmbientLight(0x88aacc,0.65));
+const key1=new T.DirectionalLight(0xffffff,0.9); key1.position.set(5,8,6); scene.add(key1);
+const key2=new T.DirectionalLight(0x66ddff,0.45); key2.position.set(-6,2,-4); scene.add(key2);
+
+// orbit state
+let theta=Math.PI*0.18, phi=Math.PI*0.36, radius=9.2, target=new T.Vector3(0,0,0);
+function applyCam(){
+  camera.position.set(
+    target.x + radius*Math.sin(phi)*Math.sin(theta),
+    target.y + radius*Math.cos(phi),
+    target.z + radius*Math.sin(phi)*Math.cos(theta));
+  camera.lookAt(target);
+}
+(function bindOrbit(){
+  let drag=false,px=0,py=0;
+  vp.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;vp.setPointerCapture(e.pointerId);});
+  vp.addEventListener('pointermove',e=>{ if(!drag)return;
+    theta-=(e.clientX-px)*0.01; phi-=(e.clientY-py)*0.01;
+    phi=Math.max(0.15,Math.min(Math.PI-0.15,phi)); px=e.clientX;py=e.clientY; applyCam();});
+  vp.addEventListener('pointerup',()=>drag=false);
+  vp.addEventListener('pointerleave',()=>drag=false);
+  vp.addEventListener('wheel',e=>{e.preventDefault();radius*=(1+ (e.deltaY>0?0.1:-0.1));radius=Math.max(5,Math.min(20,radius));applyCam();},{passive:false});
+})();
+
+// holders updated when object changes
+let mainObj=null, mainEdges=[], glassBox=null, rayGroup=null, planeMeshes={};
+let projTextures={};   // CanvasTexture for each plane (fed from ortho canvases)
+let curKey='lblock', wireframe=false, showBox=true, showRays=false, autoSpin=false, unfoldT=0, angleMode='third';
+
+const matFill = new T.MeshStandardMaterial({color:COL.fill,metalness:0.25,roughness:0.45,transparent:true,opacity:0.9,flatShading:false});
+const matWire = new T.MeshBasicMaterial({color:COL.fill,wireframe:true,transparent:true,opacity:0.55});
+const matEdge = new T.LineBasicMaterial({color:COL.edge});
+
+function buildMainObject(key){
+  // clear old
+  if(mainObj){ scene.remove(mainObj); }
+  mainEdges=[];
+  const src = assemble(key);
+  const grp = new T.Group();
+  src.children.forEach(m=>{
+    const mesh=new T.Mesh(m.geometry, wireframe?matWire:matFill);
+    mesh.position.copy(m.position); mesh.scale.copy(m.scale); mesh.rotation.copy(m.rotation);
+    grp.add(mesh);
+    const eg=new T.EdgesGeometry(m.geometry, key==='cyl'||key==='car'?28:1);
+    const el=new T.LineSegments(eg,matEdge);
+    el.position.copy(m.position); el.scale.copy(m.scale); el.rotation.copy(m.rotation);
+    grp.add(el); mainEdges.push(el);
+  });
+  grp.userData.size = src.userData.size;
+  mainObj=grp; scene.add(grp);
+  buildGlassBox(grp.userData.size);
+  buildRays(grp.userData.size);
+  applyUnfold();
+}
+
+/* glass box: 3 relevant planes (front,top,right) textured with live views */
+function buildGlassBox(size){
+  if(glassBox){ scene.remove(glassBox); }
+  glassBox=new T.Group();
+  const pad=1.25;
+  const W=size.w*pad, H=size.h*pad, D=size.d*pad;
+  const hw=W/2, hh=H/2, hd=D/2;
+  // wire box (all 12 edges)
+  const boxGeo=new T.BoxGeometry(W,H,D);
+  const boxEdges=new T.LineSegments(new T.EdgesGeometry(boxGeo), new T.LineBasicMaterial({color:COL.box,transparent:true,opacity:0.55}));
+  glassBox.add(boxEdges);
+  glassBox.userData.dims={hw,hh,hd};
+
+  // helper to make a textured plane
+  function plane(name){
+    const tex=projTextures[name];
+    const mat=new T.MeshBasicMaterial({map:tex,transparent:true,opacity:0.96,side:T.DoubleSide,depthWrite:false});
+    const geo=new T.PlaneGeometry(1,1);
+    const mesh=new T.Mesh(geo,mat);
+    // faint border
+    const border=new T.LineSegments(new T.EdgesGeometry(geo), new T.LineBasicMaterial({color:COL.edge,transparent:true,opacity:0.4}));
+    mesh.add(border);
+    glassBox.add(mesh);
+    return mesh;
+  }
+  planeMeshes.front=plane('front');
+  planeMeshes.top=plane('top');
+  planeMeshes.side=plane('side');
+  // size planes
+  planeMeshes.front.scale.set(W,H,1);
+  planeMeshes.top.scale.set(W,D,1);
+  planeMeshes.side.scale.set(D,H,1);
+  scene.add(glassBox);
+  positionPlanes(0);
+}
+
+/* position/unfold the 3 planes.  t:0 = folded box, 1 = flat (third-angle layout) */
+function positionPlanes(t){
+  if(!glassBox) return;
+  const d=glassBox.userData.dims; const {hw,hh,hd}=d;
+  // FRONT plane stays at back of box (z=-hd), facing +z
+  planeMeshes.front.position.set(0,0,-hd);
+  planeMeshes.front.rotation.set(0,0,0);
+
+  // TOP plane: folded -> horizontal at y=+hh ; unfolds UP about its hinge (the top edge of front plane, y=+hh,z=-hd)
+  const top=planeMeshes.top;
+  const ang = (1-t)*(Math.PI/2);   // t0 -> 90° (lying flat horizontal), t1 -> 0 (vertical, coplanar w/ front)
+  top.rotation.set(ang,0,0);
+  // hinge at (0,+hh,-hd). plane local +y goes "up the board". depth = D.
+  // when vertical (t1) it should sit ABOVE front: centre at y = hh + D/2, z=-hd
+  // param: centre = hinge + R(ang)*(0, halfDepth)
+  top.position.set(0, hh + Math.cos(ang)*(hd*2*0/1) , 0); // placeholder, set precisely below
+  // compute precisely: local up vector after rotX(ang)
+  const upY=Math.cos(ang), upZ=Math.sin(ang);
+  top.position.set(0, hh + upY*(planeMeshes.top.scale.y/2), -hd + upZ*(planeMeshes.top.scale.y/2));
+
+  // SIDE plane (right): folded vertical at x=+hw facing -x ; unfolds OUT to the right about hinge (right edge of front: x=+hw,z=-hd)
+  const side=planeMeshes.side;
+  const angS=(1-t)*(Math.PI/2);
+  side.rotation.set(0, ( -Math.PI/2 + angS ), 0);
+  const rightX=Math.cos(angS), rightZ=Math.sin(angS);
+  side.position.set(hw + rightX*(planeMeshes.side.scale.x/2), 0, -hd + rightZ*(planeMeshes.side.scale.x/2));
+  // texture orientation on side when flat should read as right-side view (handled by ortho camera)
+}
+function applyUnfold(){ positionPlanes(unfoldT); }
+
+/* projector rays from object centre to each plane */
+function buildRays(size){
+  if(rayGroup) scene.remove(rayGroup);
+  rayGroup=new T.Group();
+  const mat=new T.LineDashedMaterial({color:COL.ray,dashSize:0.18,gapSize:0.12,transparent:true,opacity:0.7});
+  const hw=size.w/2,hh=size.h/2,hd=size.d/2,pad=1.25;
+  const pts=[[0,0,-hd*pad],[0,hh*pad,0],[hw*pad,0,0]];
+  pts.forEach(p=>{
+    const g=new T.BufferGeometry().setFromPoints([new T.Vector3(0,0,0),new T.Vector3(p[0],p[1],p[2])]);
+    const l=new T.Line(g,mat); l.computeLineDistances(); rayGroup.add(l);
+  });
+  scene.add(rayGroup); rayGroup.visible=showRays;
+}
+
+/* ---------------------------------------------------------------------------
+   3. OFFSCREEN ORTHO RENDERER  (shared, low context count)
+--------------------------------------------------------------------------- */
+const VIEW_PX=320;
+const off=document.createElement('canvas'); off.width=VIEW_PX; off.height=VIEW_PX;
+const offRenderer=new T.WebGLRenderer({canvas:off,antialias:true,alpha:true,preserveDrawingBuffer:true});
+offRenderer.setPixelRatio(1); offRenderer.setSize(VIEW_PX,VIEW_PX,false);
+offRenderer.setClearColor(0x06101c,1);
+const offScene=new T.Scene();
+offScene.add(new T.AmbientLight(0xffffff,1));
+
+const oCam={
+  front:new T.OrthographicCamera(-ORTHO_HALF,ORTHO_HALF,ORTHO_HALF,-ORTHO_HALF,-50,50),
+  top:  new T.OrthographicCamera(-ORTHO_HALF,ORTHO_HALF,ORTHO_HALF,-ORTHO_HALF,-50,50),
+  side: new T.OrthographicCamera(-ORTHO_HALF,ORTHO_HALF,ORTHO_HALF,-ORTHO_HALF,-50,50)
+};
+oCam.front.position.set(0,0,10); oCam.front.lookAt(0,0,0);
+oCam.top.position.set(0,10,0);   oCam.top.up.set(0,0,-1); oCam.top.lookAt(0,0,0);
+oCam.side.position.set(10,0,0);  oCam.side.lookAt(0,0,0);   // right-side view (+X)
+
+let offObj=null;
+const matOFill=new T.MeshBasicMaterial({color:COL.fill,transparent:true,opacity:0.22,side:T.DoubleSide});
+const matOEdge=new T.LineBasicMaterial({color:COL.edge});
+function setOffObject(key){
+  if(offObj) offScene.remove(offObj);
+  const src=assemble(key);
+  const grp=new T.Group();
+  src.children.forEach(m=>{
+    const mesh=new T.Mesh(m.geometry,matOFill);
+    mesh.position.copy(m.position);mesh.scale.copy(m.scale);mesh.rotation.copy(m.rotation);
+    grp.add(mesh);
+    const eg=new T.EdgesGeometry(m.geometry,key==='cyl'||key==='car'?28:1);
+    const el=new T.LineSegments(eg,matOEdge);
+    el.position.copy(m.position);el.scale.copy(m.scale);el.rotation.copy(m.rotation);
+    grp.add(el);
+  });
+  grp.userData.size=src.userData.size;
+  offObj=grp; offScene.add(grp); return grp.userData.size;
+}
+
+// display canvases
+const dispCanvas={front:document.getElementById('cvFront'),top:document.getElementById('cvTop'),side:document.getElementById('cvSide')};
+Object.values(dispCanvas).forEach(c=>{c.width=VIEW_PX;c.height=VIEW_PX;});
+const dispCtx={front:dispCanvas.front.getContext('2d'),top:dispCanvas.top.getContext('2d'),side:dispCanvas.side.getContext('2d')};
+
+// canvas textures for glass planes (front view shown on front plane, etc.)
+['front','top','side'].forEach(v=>{ projTextures[v]=new T.CanvasTexture(dispCanvas[v]); projTextures[v].needsUpdate=true; });
+
+function renderOrthoView(v){
+  offRenderer.render(offScene,oCam[v]);
+  const ctx=dispCtx[v];
+  ctx.clearRect(0,0,VIEW_PX,VIEW_PX);
+  // grid backdrop
+  ctx.fillStyle='#06101c'; ctx.fillRect(0,0,VIEW_PX,VIEW_PX);
+  ctx.strokeStyle='rgba(31,111,122,.25)'; ctx.lineWidth=1;
+  for(let i=0;i<=VIEW_PX;i+=40){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,VIEW_PX);ctx.moveTo(0,i);ctx.lineTo(VIEW_PX,i);ctx.stroke();}
+  ctx.drawImage(off,0,0,VIEW_PX,VIEW_PX);
+  if(projTextures[v]) projTextures[v].needsUpdate=true;
+}
+function renderAllOrtho(){ renderOrthoView('front'); renderOrthoView('top'); renderOrthoView('side'); }
+
+/* dimension labels: which views carry which dimensions */
+function setDims(size){
+  const w=size.rawW.toFixed(1), h=size.rawH.toFixed(1), d=size.rawD.toFixed(1);
+  document.getElementById('dimFront').textContent='W×H';
+  document.getElementById('dimTop').textContent='W×D';
+  document.getElementById('dimSide').textContent='D×H';
+}
+
+/* thumbnail (data URL) renderers for quizzes */
+function thumbIso(key){
+  const s=setOffObject(key);
+  const cam=new T.OrthographicCamera(-ORTHO_HALF*1.15,ORTHO_HALF*1.15,ORTHO_HALF*1.15,-ORTHO_HALF*1.15,-50,50);
+  cam.position.set(6,5,7); cam.lookAt(0,0,0);
+  offScene.add(new T.AmbientLight(0xffffff,0.2));
+  offRenderer.setClearColor(0x050c16,1);
+  offRenderer.render(offScene,cam);
+  const url=off.toDataURL();
+  setOffObject(curKey); // restore
+  return url;
+}
+function thumbView(key,v){
+  setOffObject(key);
+  offRenderer.setClearColor(0x06101c,1);
+  offRenderer.render(offScene,oCam[v]);
+  const url=off.toDataURL();
+  setOffObject(curKey);
+  return url;
+}
+
+/* ---------------------------------------------------------------------------
+   4. RESIZE + RENDER LOOP
+--------------------------------------------------------------------------- */
+function resize(){
+  const w=vp.clientWidth,h=vp.clientHeight;
+  mainRenderer.setSize(w,h,false);
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+window.addEventListener('resize',resize);
+
+let lastOrtho=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(autoSpin){ theta+=0.005; applyCam(); }
+  if(glassBox) glassBox.visible=showBox;
+  if(rayGroup) rayGroup.visible=showRays;
+  // throttle ortho re-render ~30fps
+  if(ts-lastOrtho>33){ renderAllOrtho(); lastOrtho=ts; }
+  mainRenderer.render(scene,camera);
+}
+
+/* ---------------------------------------------------------------------------
+   5. CONTROL WIRING
+--------------------------------------------------------------------------- */
+function loadObject(key){
+  curKey=key;
+  buildMainObject(key);
+  const size=setOffObject(key);
+  setDims(size);
+  document.getElementById('objSelect').value=key;
+}
+function tg(el,getter,setter){
+  el.addEventListener('click',()=>{ const v=!getter(); setter(v); el.classList.toggle('on',v); });
+}
+tg(document.getElementById('tgBox'),()=>showBox,v=>showBox=v);
+tg(document.getElementById('tgRays'),()=>showRays,v=>showRays=v);
+tg(document.getElementById('tgSpin'),()=>autoSpin,v=>autoSpin=v);
+tg(document.getElementById('tgWire'),()=>wireframe,v=>{wireframe=v;buildMainObject(curKey);});
+document.getElementById('unfold').addEventListener('input',e=>{unfoldT=e.target.value/100;applyUnfold();});
+document.getElementById('resetView').addEventListener('click',()=>{theta=Math.PI*0.18;phi=Math.PI*0.36;radius=9.2;applyCam();document.getElementById('unfold').value=0;unfoldT=0;applyUnfold();});
+
+const sel=document.getElementById('objSelect');
+Object.keys(LIB).forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=LIB[k].name;sel.appendChild(o);});
+sel.addEventListener('change',e=>loadObject(e.target.value));
+
+// angle mode (third vs first). In first-angle, top goes BELOW, side goes LEFT.
+function applyAngleLayout(){
+  const grid=document.getElementById('orthoGrid');
+  const top=grid.querySelector('.ov-top'), front=grid.querySelector('.ov-front'),
+        side=grid.querySelector('.ov-side'), empty=document.getElementById('ovEmpty');
+  if(angleMode==='third'){
+    top.style.gridColumn='1';top.style.gridRow='1';
+    front.style.gridColumn='1';front.style.gridRow='2';
+    side.style.gridColumn='2';side.style.gridRow='2';
+    empty.style.gridColumn='2';empty.style.gridRow='1';
+    empty.textContent='In third-angle (Australian standard) the TOP view sits directly above the FRONT view.';
+    document.getElementById('angleBadge').textContent='THIRD-ANGLE (AU)';
+    document.getElementById('angleToggle').textContent='switch to first-angle';
+    side.querySelector('.vlabel').textContent='RIGHT SIDE';
+  }else{
+    front.style.gridColumn='2';front.style.gridRow='1';
+    top.style.gridColumn='2';top.style.gridRow='2';
+    side.style.gridColumn='1';side.style.gridRow='1';
+    empty.style.gridColumn='1';empty.style.gridRow='2';
+    empty.textContent='In first-angle (Europe/Asia) the TOP view drops BELOW the front and the RIGHT-side view jumps to the LEFT.';
+    document.getElementById('angleBadge').textContent='FIRST-ANGLE (EU)';
+    document.getElementById('angleToggle').textContent='switch to third-angle';
+    side.querySelector('.vlabel').textContent='RIGHT SIDE';
+  }
+}
+document.getElementById('angleToggle').addEventListener('click',()=>{angleMode=angleMode==='third'?'first':'third';applyAngleLayout();});
+
+/* =========================================================================
+   6. LAB CONTENT
+   ========================================================================= */
+const STEP=(n,h,b,svg)=>`<div class="step"><div class="num">${n}</div><div class="sbody"><h4>${h}</h4><p>${b}</p>${svg?`<div class="svg-wrap">${svg}</div>`:''}</div></div>`;
+
+/* ---- reusable self-made SVG diagrams ---- */
+const SVG_GLASSBOX=`<svg viewBox="0 0 240 150" width="240">
+  <defs><style>.e{stroke:#67e8f9;fill:none;stroke-width:1.4}.b{stroke:#1f6f7a;fill:none;stroke-width:1;stroke-dasharray:3 3}.f{fill:#22d3ee;opacity:.18}</style></defs>
+  <polygon class="b" points="40,40 160,40 200,70 80,70"/><polygon class="b" points="40,40 40,110 80,140 80,70"/>
+  <polygon class="b" points="160,40 200,70 200,140 160,110"/>
+  <polygon class="f" points="70,75 120,75 140,90 90,90"/><polygon class="e" points="70,75 120,75 140,90 90,90 70,75"/>
+  <polygon class="f" points="70,75 70,105 90,118 90,90"/><polygon class="e" points="70,75 70,105 90,118 90,90 70,75"/>
+  <polygon class="f" points="120,75 140,90 140,118 120,105"/><polygon class="e" points="120,75 140,90 140,118 120,105 120,75"/>
+  <text x="120" y="20" fill="#fbbf24" font-size="11" font-family="monospace" text-anchor="middle">object suspended in a glass box</text>
+</svg>`;
+
+const SVG_UNFOLD=`<svg viewBox="0 0 260 150" width="260">
+  <defs><style>.p{fill:#0d1b30;stroke:#67e8f9;stroke-width:1.2}.l{stroke:#fbbf24;stroke-width:1;stroke-dasharray:2 2}.t{fill:#67e8f9;font-size:9px;font-family:monospace;text-anchor:middle}</style></defs>
+  <rect class="p" x="100" y="60" width="50" height="50"/><text class="t" x="125" y="90">FRONT</text>
+  <rect class="p" x="100" y="6" width="50" height="50"/><text class="t" x="125" y="35">TOP</text>
+  <rect class="p" x="154" y="60" width="50" height="50"/><text class="t" x="179" y="90">SIDE</text>
+  <line class="l" x1="100" y1="58" x2="150" y2="58"/><line class="l" x1="152" y1="60" x2="152" y2="110"/>
+  <path d="M30 85 q-10 -25 0 -50" stroke="#fbbf24" fill="none" stroke-width="1.2" marker-end="url(#a)"/>
+  <text x="40" y="130" fill="#fbbf24" font-size="9" font-family="monospace">unfold hinges → flat layout</text>
+</svg>`;
+
+const SVG_DIMS=`<svg viewBox="0 0 260 130" width="260">
+  <defs><style>.bx{fill:#0d1b30;stroke:#67e8f9;stroke-width:1.2}.d{stroke:#fb7185;stroke-width:1}.dy{stroke:#34d399;stroke-width:1}.dz{stroke:#60a5fa;stroke-width:1}.t{font-size:9px;font-family:monospace}</style></defs>
+  <rect class="bx" x="40" y="60" width="60" height="40"/><text class="t" x="70" y="84" fill="#67e8f9" text-anchor="middle">FRONT</text>
+  <rect class="bx" x="40" y="10" width="60" height="40"/><text class="t" x="70" y="34" fill="#67e8f9" text-anchor="middle">TOP</text>
+  <rect class="bx" x="105" y="60" width="40" height="40"/><text class="t" x="125" y="84" fill="#67e8f9" text-anchor="middle">SIDE</text>
+  <line class="d" x1="40" y1="108" x2="100" y2="108"/><text class="t" x="70" y="120" fill="#fb7185" text-anchor="middle">WIDTH shared ↕</text>
+  <line class="dy" x1="150" y1="60" x2="150" y2="100"/><text class="t" x="200" y="84" fill="#34d399">HEIGHT shared ↔</text>
+  <line class="dz" x1="32" y1="60" x2="32" y2="100"/><text class="t" x="6" y="50" fill="#60a5fa">DEPTH</text>
+</svg>`;
+
+const SVG_HIDDEN=`<svg viewBox="0 0 220 110" width="220">
+  <defs><style>.s{stroke:#67e8f9;fill:none;stroke-width:1.6}.h{stroke:#94a3b8;fill:none;stroke-width:1.2;stroke-dasharray:5 4}.c{stroke:#fb7185;fill:none;stroke-width:.8;stroke-dasharray:7 3 2 3}.t{font-size:9px;font-family:monospace;fill:#cfe8f3}</style></defs>
+  <rect class="s" x="20" y="20" width="70" height="70"/>
+  <line class="h" x1="40" y1="20" x2="40" y2="90"/><line class="h" x1="70" y1="20" x2="70" y2="90"/>
+  <text class="t" x="55" y="105" text-anchor="middle">hidden hole = dashed</text>
+  <circle class="s" cx="160" cy="55" r="30"/><line class="c" x1="160" y1="15" x2="160" y2="95"/><line class="c" x1="120" y1="55" x2="200" y2="55"/>
+  <text class="t" x="160" y="105" text-anchor="middle">centre line = chain</text>
+</svg>`;
+
+const SVG_SYMBOL=`<svg viewBox="0 0 240 90" width="240">
+  <defs><style>.o{fill:none;stroke:#67e8f9;stroke-width:1.4}.t{font-size:9px;font-family:monospace;fill:#fbbf24}</style></defs>
+  <g transform="translate(20,20)"><circle class="o" cx="20" cy="25" r="16"/><circle class="o" cx="20" cy="25" r="9"/>
+  <polygon class="o" points="50,9 80,25 50,41"/><polygon class="o" points="50,15 68,25 50,35"/>
+  <text class="t" x="0" y="62">THIRD-ANGLE (cone points away)</text></g>
+  <g transform="translate(150,20)"><polygon class="o" points="0,9 30,25 0,41"/><polygon class="o" points="0,15 18,25 0,35"/>
+  <circle class="o" cx="60" cy="25" r="16"/><circle class="o" cx="60" cy="25" r="9"/>
+  <text class="t" x="-5" y="62">FIRST-ANGLE</text></g>
+</svg>`;
+
+const CAREER = (chips,blurb)=>`<div class="career"><h3>◢ WHERE THE PROS USE THIS</h3><div class="chips">${chips.map(c=>`<span class="chip">${c}</span>`).join('')}</div><p>${blurb}</p></div>`;
+
+const LABS = [
+ { id:'glassbox', title:'The Glass Box', rightTitle:'Why we flatten 3D into views',
+   obj:'house', setup:{box:true,rays:false,unfold:0},
+   right:`<div class="intro-hero"><h3>Orthographic projection = the universal language of design</h3>
+     <p>A 3D object can't be built from a single drawing — a curved photo lies about its true sizes. So designers freeze the object inside an imaginary <b>glass box</b> and look <b>straight on</b> at each face. Each face becomes a flat, true-size <b>view</b>. Get this right and an architect, an engineer in another country, or a CNC machine can all read your idea perfectly.</p></div>
+     <div class="target-card"><h3>What you're aiming for</h3><p>Understand that the FRONT, TOP and RIGHT views you see on the left are <b>shadows of the same object</b> projected at right angles ("ortho" = right angle) onto the walls of a glass box.</p></div>
+     <div class="steps">
+       ${STEP(1,'Look at the live object','The Mini House is suspended inside the cyan glass box on the left. Drag to rotate it in 3D.',SVG_GLASSBOX)}
+       ${STEP(2,'Find the three shadows','Watch the three small panels (TOP, FRONT, RIGHT SIDE). Each is the object viewed <b>flat-on</b> down one axis — a true-size shadow, no perspective distortion.')}
+       ${STEP(3,'Why "ortho"?','The projector lines hit each glass wall at <b>90° (a right angle)</b>. Turn on <b>Projector Rays</b> on the left to see them. That right angle is what keeps every measurement true.')}
+       ${STEP(4,'Spin and confirm','Rotate the house. Notice the FRONT view shows the gable + door, the TOP view shows the roof ridge, the SIDE shows the slope. Three flat views describe the whole building.')}
+     </div>
+     ${CAREER(['Architect','Architectural drafter','Civil engineer','Set designer'],'Every building you have ever entered started as orthographic views — a <b>plan</b> (top view), <b>elevations</b> (front/side views) and <b>sections</b>. Builders, councils and clients all read these flat drawings, never the 3D model alone.')}`,
+   task:{type:'check', heading:'Mission checklist', items:[
+     'Rotate the house in the 3D sandbox',
+     'Identify the FRONT, TOP and RIGHT views',
+     'Turn ON Projector Rays and spot the right angles',
+     'Switch the object to "Concept Car" and find its 3 views']}},
+
+ { id:'unfold', title:'Unfold the Box', rightTitle:'From box to flat drawing',
+   obj:'lblock', setup:{box:true,rays:false,unfold:0},
+   right:`<div class="target-card"><h3>What you're aiming for</h3><p>See how the glass box <b>unfolds flat</b> so the three views land in their standard positions on a 2D page. Drag the <b>Unfold</b> slider on the left from 0 → 100%.</p></div>
+     <div class="steps">
+       ${STEP(1,'Start folded','With Unfold at 0%, the three glass walls wrap around the L-Bracket. The FRONT wall is behind, TOP is above, RIGHT is to the side.')}
+       ${STEP(2,'Open the hinges','Slide Unfold toward 100%. The TOP wall swings <b>up</b> and the SIDE wall swings <b>out</b> — like opening cardboard flaps — until all three lie in one flat plane.',SVG_UNFOLD)}
+       ${STEP(3,'Read the standard layout','When flat, the views snap into place: <b>TOP sits directly above FRONT</b>, and <b>RIGHT SIDE sits directly to the right of FRONT</b>. This exact arrangement is the <b>third-angle</b> standard — the one used in Australia.')}
+       ${STEP(4,'The golden rule','Views never float randomly. They <b>line up</b>: the top edge of the front view matches the bottom edge of the top view; the right edge of the front matches the left edge of the side view.')}
+     </div>
+     ${CAREER(['CAD drafter','Mechanical engineer','Product designer'],'A drawing that breaks the standard layout gets <b>rejected</b> on a real worksite — a fabricator could build the part mirrored or upside-down. Drafters spend their first week learning exactly this fold-out arrangement.')}`,
+   task:{type:'check', heading:'Mission checklist', items:[
+     'Drag Unfold slowly from 0% to 100%',
+     'Watch the TOP wall hinge upward',
+     'Watch the SIDE wall hinge outward',
+     'Confirm: TOP is above FRONT, SIDE is right of FRONT']}},
+
+ { id:'align', title:'The 3 Views & Alignment', rightTitle:'Width · Height · Depth',
+   obj:'step', setup:{box:false,rays:false,unfold:100},
+   right:`<div class="target-card"><h3>What you're aiming for</h3><p>Know which <b>dimensions</b> each view carries, and how the three views <b>share</b> measurements. This is the secret to never drawing a contradiction.</p></div>
+     <div class="steps">
+       ${STEP(1,'Three dimensions','Every object has <b>Width (X)</b>, <b>Height (Y)</b> and <b>Depth (Z)</b>. See the colour key in the top-right of the sandbox.')}
+       ${STEP(2,'What each view shows','FRONT = Width × Height. TOP = Width × Depth. RIGHT SIDE = Depth × Height. No single view shows all three — that\'s why you need at least two.',SVG_DIMS)}
+       ${STEP(3,'Shared edges line up','FRONT and TOP share the same <b>Width</b> (they line up vertically). FRONT and SIDE share the same <b>Height</b> (they line up horizontally). This is the alignment law.')}
+       ${STEP(4,'The 45° transfer','Pros project depth from the top view across to the side view using a <b>45° mitre line</b>. It guarantees the depth in the side view exactly matches the depth in the top view.')}
+     </div>
+     ${CAREER(['Engineer','Drafter','Quantity surveyor','Toolmaker'],'Dimension once, read everywhere. On real drawings each measurement appears in <b>only one</b> view to avoid conflicting numbers — readers transfer it across using the alignment law.')}`,
+   task:{type:'check', heading:'Mission checklist', items:[
+     'Identify the Width axis (X, red) on the Stepped Block',
+     'Confirm FRONT and TOP share the same width',
+     'Confirm FRONT and SIDE share the same height',
+     'Explain why TOP shows depth but FRONT does not']}},
+
+ { id:'angles', title:'First vs Third Angle', rightTitle:'Two world standards',
+   obj:'wedge', setup:{box:false,rays:false,unfold:100},
+   right:`<div class="target-card"><h3>What you're aiming for</h3><p>Recognise the two layout standards and the symbol that tells you which one a drawing uses. Press <b>switch to first-angle</b> on the left and watch the views jump.</p></div>
+     <div class="steps">
+       ${STEP(1,'Third-angle (Australia, USA, Canada, Japan)','Imagine looking <b>through</b> the glass at the object. The view lands on the <b>same side</b> you look from: look at the top → TOP view goes above. This is what you\'ve used so far.')}
+       ${STEP(2,'First-angle (Europe, much of Asia)','Imagine the object <b>casts a shadow</b> onto a wall behind it. Views land on the <b>opposite</b> side: TOP view drops below, RIGHT-side view jumps to the LEFT.')}
+       ${STEP(3,'The warning symbol','Every professional drawing carries a small <b>truncated-cone symbol</b> in the title block so nobody mixes them up. Learn to read it.',SVG_SYMBOL)}
+       ${STEP(4,'Toggle and compare','Use the angle switch on the left. Watch the same wedge\'s views rearrange. Neither is "better" — what matters is <b>consistency</b> and labelling.')}
+     </div>
+     ${CAREER(['Automotive designer','Aerospace engineer','Global manufacturing'],'Car and aircraft parts are designed across continents. A European supplier reading an Australian third-angle drawing as first-angle would build the part <b>mirror-flipped</b> — a million-dollar mistake. The cone symbol prevents it.')}`,
+   task:{type:'check', heading:'Mission checklist', items:[
+     'Switch the views to first-angle',
+     'Notice the TOP view move below the FRONT',
+     'Notice the SIDE view move to the left',
+     'Find which standard Australia uses (hint: third-angle)']}},
+
+ { id:'read', title:'Read the Views', rightTitle:'2D → 3D : spatial reasoning',
+   obj:'plate', setup:{box:false,rays:false,unfold:100},
+   right:`<div class="target-card"><h3>What you're aiming for</h3><p>The real skill: look at a flat set of views and <b>see the 3D object in your head</b>. On the left you\'re shown three mystery views — pick the matching 3D object.</p></div>
+     <div class="steps">
+       ${STEP(1,'Study one view at a time','Start with the FRONT view outline. What shape is it? Then check TOP — does it get wider, have a step, a hole?')}
+       ${STEP(2,'Cross-check','A circle in the TOP view + a rectangle in FRONT = a cylinder. A triangle in FRONT + rectangle in TOP = a wedge/ramp. Combine the clues.')}
+       ${STEP(3,'Mentally rotate','Spin the candidate objects in the sandbox (use the Object dropdown) and compare their live views to the mystery views. Match = correct.')}
+       ${STEP(4,'Trust the alignment','If your guess produces views that line up with the mystery set, you\'re right. This mental 3D-from-2D skill is exactly what designers are paid for.')}
+     </div>
+     ${CAREER(['Architect','Industrial designer','Game asset artist','Builder'],'A builder reading house plans, a modeller reading a part spec, a designer reviewing a teammate\'s drawing — all must reconstruct the 3D form from flat views instantly. This is the core employability skill of the whole field.')}`,
+   task:{type:'identify'}},
+
+ { id:'build', title:'Build the Views', rightTitle:'3D → 2D : project it yourself',
+   obj:'chair', setup:{box:true,rays:true,unfold:0},
+   right:`<div class="target-card"><h3>What you're aiming for</h3><p>Given a 3D object, choose its <b>correct TOP view</b> from four options. You are now the drafter.</p></div>
+     <div class="steps">
+       ${STEP(1,'Look straight down','The TOP view = what you\'d see looking <b>vertically down</b> on the object (a bird\'s-eye / plan view). Ignore height entirely.')}
+       ${STEP(2,'Flatten it','For the chair: from above you see the square seat outline, the thin back strip at the rear, and four small leg squares at the corners.')}
+       ${STEP(3,'Watch for hidden parts','Parts underneath (legs hidden by the seat) may show as <b>dashed</b> lines. Visible outlines are solid.')}
+       ${STEP(4,'Choose','Pick the option on the left that matches the true top-down projection. Use the live TOP panel in the sandbox to check yourself.')}
+     </div>
+     ${CAREER(['Interior designer','Architect','Furniture designer'],'Furniture and interiors are sold from <b>plan views</b> (top-down) plus elevations. IKEA-style assembly drawings, kitchen layouts and floor plans are all top views you\'ll learn to produce.')}`,
+   task:{type:'match'}},
+
+ { id:'hidden', title:'Hidden Detail & Centre Lines', rightTitle:'The line conventions',
+   obj:'plate', setup:{box:false,rays:false,unfold:100},
+   right:`<div class="target-card"><h3>What you're aiming for</h3><p>Read the line "alphabet" — solid, dashed and chain lines each mean something specific. Load the <b>Mounting Plate + Hole</b> and study its views.</p></div>
+     <div class="steps">
+       ${STEP(1,'Visible = solid bold','Edges and outlines you can actually see are drawn as <b>thick solid</b> lines.')}
+       ${STEP(2,'Hidden = dashed','Edges blocked by material in front (like a hole drilled through the back) are drawn as <b>thin dashed</b> lines so they aren\'t lost.',SVG_HIDDEN)}
+       ${STEP(3,'Centre = chain','The centres of holes and circles get a <b>long-short chain</b> line (dash-dot). It marks symmetry and gives a target for the drill.')}
+       ${STEP(4,'On the plate','The FRONT view shows the hole as a solid circle with a centre cross. The TOP and SIDE views show the hole as <b>two dashed lines</b> — it\'s there, but hidden inside the depth.')}
+     </div>
+     ${CAREER(['CAD technician','Machinist','Mechanical engineer'],'A machinist drills exactly where the centre lines cross and to the depth the dashed lines imply. Getting line types wrong literally produces the wrong part.')}`,
+   task:{type:'check', heading:'Mission checklist', items:[
+     'Load the Mounting Plate + Hole',
+     'Find the hole as a solid circle in FRONT view',
+     'Reason where the hole would be dashed (TOP/SIDE)',
+     'Identify what a chain line marks']}},
+
+ { id:'capstone', title:'Capstone Challenge', rightTitle:'Two real-world briefs',
+   obj:'house', setup:{box:true,rays:false,unfold:0},
+   right:`<div class="target-card"><h3>What you're aiming for</h3><p>Apply everything to two career objects — the <b>Mini House</b> (architecture) and the <b>Concept Car</b> (automotive). Produce a full, correctly-aligned set of views in your head, then verify with the sandbox.</p></div>
+     <div class="steps">
+       ${STEP(1,'Brief A — Architect','Load the Mini House. Sketch (on paper or in your head) the FRONT elevation (gable + door), the TOP plan (roof ridge + outline) and the RIGHT elevation (roof slope). Check each against the sandbox.')}
+       ${STEP(2,'Brief B — Car designer','Load the Concept Car. The SIDE view is the famous profile silhouette. The FRONT view shows width + ride height + wheels. The TOP view shows the cabin footprint. Verify with the live panels.')}
+       ${STEP(3,'Apply line conventions','Where are wheels hidden behind the body (dashed)? Where do wheel centres sit (chain lines)?')}
+       ${STEP(4,'Self-assess','For each object, does your view set obey the alignment law and the third-angle layout? If yes — you can communicate a 3D form in the universal language. ')}
+     </div>
+     ${CAREER(['Architect','Automotive designer','Naval/marine drafter','Aerospace'],'Concept cars are signed off from <b>profile + plan + front</b> orthographic packages before a single clay model is cut. Houses are approved by council from plans + elevations. You just did the entry-level version of both jobs.')}`,
+   task:{type:'check', heading:'Capstone checklist', items:[
+     'Produce 3 correct views for the Mini House',
+     'Produce 3 correct views for the Concept Car',
+     'Mark hidden lines and centre lines correctly',
+     'Confirm everything follows third-angle alignment']}},
+
+ { id:'eval', title:'Evaluation', rightTitle:'Show what you know',
+   obj:'lblock', setup:{box:false,rays:false,unfold:100},
+   right:`<div class="intro-hero"><h3>Knowledge Check</h3><p>Eight questions covering the whole module. Answer them on the left — you\'ll get instant feedback and a final rank. You can keep the sandbox open to reason it out.</p></div>
+     <div class="callout"><b>Tip:</b> if a question stalls you, load the matching object on the left and rotate it. Seeing beats guessing.</div>`,
+   task:{type:'eval'}},
+
+ { id:'next', title:'On to 3D Modelling', rightTitle:'Take it into Tinkercad & Blender',
+   obj:'car', setup:{box:false,rays:false,unfold:0},
+   right:`<div class="target-card"><h3>You\'ve learned to read & flatten 3D. Now reverse it.</h3><p>Modelling software lets you <b>build the 3D object back up</b> from your orthographic understanding. The views you mastered become your blueprint.</p></div>
+     <div class="bridge">
+       <h3>▶ Your next missions</h3>
+       <p>Pick an object you projected here and <b>rebuild it in 3D</b>. Your orthographic views are the reference drawing — set them as background images and trace the form.</p>
+       <div class="tools">
+         <div class="tool"><h4>Tinkercad (start here)</h4><p>Drag-and-drop primitive shapes. Rebuild the <b>Stepped Block</b> or <b>Mini House</b>: combine boxes, use the Workplane, align using the same Width/Depth/Height you measured. Free, browser-based.</p></div>
+         <div class="tool"><h4>Blender (level up)</h4><p>Import your FRONT and SIDE views as <b>reference images</b> (background images add-on). Box-model the <b>Concept Car</b> by extruding along the profile — exactly the side view you read here.</p></div>
+       </div>
+     </div>
+     <div class="steps">
+       ${STEP(1,'Export a reference','Screenshot the FRONT, TOP and SIDE panels from the sandbox. These are your modelling blueprints.')}
+       ${STEP(2,'Block it out in Tinkercad','Recreate one object using primitives. Match real proportions using the dimensions you identified (W×H×D).')}
+       ${STEP(3,'Refine in Blender','Set the front/side views as background references and model over them. This is literally how pro car & product designers start a model.')}
+       ${STEP(4,'Come full circle','Render your finished 3D model\'s orthographic views and compare to your originals. If they match — you\'ve closed the loop from 2D to 3D and back.')}
+     </div>
+     ${CAREER(['3D modeller','Game/film artist','Product designer','BIM technician'],'Studios and engineering firms model directly from orthographic reference. The skill you built here is the on-ramp to every CAD and 3D tool you\'ll ever touch.')}`,
+   task:{type:'check', heading:'Bridge checklist', items:[
+     'Screenshot your 3 orthographic views',
+     'Rebuild one object in Tinkercad from primitives',
+     'Try a Blender model using front/side references',
+     'Compare your 3D model\'s views back to the originals']}}
+];
+
+/* =========================================================================
+   7. QUIZ DATA
+   ========================================================================= */
+// identify task: show mystery object's 3 views (left task), pick its 3D iso from 4
+const IDENTIFY = { answer:'plate', options:['cyl','plate','wedge','step'] };
+// match task: show iso of chair, pick correct TOP view from 4
+const MATCH = { obj:'chair', view:'top', answer:'chair', options:['chair','car','plate','step'] };
+
+const EVAL = [
+ { q:'What does "orthographic" literally refer to?', opts:['Colourful drawing','Projection at right angles (90°)','A type of perspective','Curved projection'], a:1,
+   ex:'Ortho = right angle. Projector lines hit each glass-box wall at 90°, keeping all sizes true.' },
+ { q:'In the Australian (third-angle) standard, where does the TOP view go?', opts:['Below the front view','To the left of front','Directly above the front view','Inside the front view'], a:2,
+   ex:'Third-angle: the view lands on the same side you look from — so TOP sits above FRONT.' },
+ { q:'Which two dimensions does the FRONT view show?', opts:['Width × Depth','Depth × Height','Width × Height','Height only'], a:2,
+   ex:'FRONT = Width × Height. TOP adds Depth, SIDE = Depth × Height.' },
+ { q:'A hole drilled through the back of a block appears in the TOP view as…', opts:['A solid circle','Two dashed (hidden) lines','A chain line only','Nothing at all'], a:1,
+   ex:'Hidden edges are drawn dashed. The hole is real but blocked by material, so dashed lines show it.' },
+ { q:'The truncated-cone symbol in a title block tells you…', opts:['The scale','First- or third-angle projection','The material','North direction'], a:1,
+   ex:'It warns readers which projection standard is used so views aren\'t read mirror-flipped.' },
+ { q:'FRONT and TOP views must line up because they share the same…', opts:['Height','Width','Depth','Colour'], a:1,
+   ex:'FRONT and TOP share Width, so they align vertically. FRONT and SIDE share Height and align horizontally.' },
+ { q:'A circle in the TOP view and a rectangle in the FRONT view describes a…', opts:['Cube','Pyramid','Cylinder','Cone'], a:2,
+   ex:'Round from the top + straight sides from the front = a cylinder. Cross-checking views reveals the 3D form.' },
+ { q:'Why do designers use orthographic views instead of a single 3D picture?', opts:['They look nicer','They show true, undistorted measurements anyone can build from','They are faster to colour','They use less paper'], a:1,
+   ex:'A perspective image distorts sizes. Orthographic views are true-size, so engineers, builders and machines worldwide can build from them exactly.' }
+];
+
+/* =========================================================================
+   8. RENDER LABS / TASKS
+   ========================================================================= */
+let current=0;
+const done=loadProgress();
+
+function renderNav(){
+  const nav=document.getElementById('labnav'); nav.innerHTML='';
+  LABS.forEach((l,i)=>{
+    const b=document.createElement('button');
+    b.className='lab-btn'+(i===current?' active':'')+(done[l.id]?' done':'');
+    b.innerHTML=`<span class="n">${done[l.id]?'✓':String(i+1).padStart(2,'0')}</span>${l.title}`;
+    b.onclick=()=>goLab(i);
+    nav.appendChild(b);
+  });
+  const total=LABS.length, d=LABS.filter(l=>done[l.id]).length;
+  document.getElementById('pbar').style.width=(d/total*100)+'%';
+  document.getElementById('pcount').textContent=`${d}/${total}`;
+}
+
+function markDone(id){ if(!done[id]){done[id]=true;saveProgress();renderNav();} }
+
+function goLab(i){
+  current=i; const lab=LABS[i];
+  document.getElementById('leftTitle').textContent=lab.title;
+  document.getElementById('rightTitle').textContent=lab.rightTitle;
+  // apply object + setup
+  loadObject(lab.obj);
+  showBox=lab.setup.box; showRays=lab.setup.rays;
+  document.getElementById('tgBox').classList.toggle('on',showBox);
+  document.getElementById('tgRays').classList.toggle('on',showRays);
+  unfoldT=(lab.setup.unfold||0)/100; document.getElementById('unfold').value=lab.setup.unfold||0; applyUnfold();
+  // right pane
+  document.getElementById('rightBody').innerHTML=lab.right+navFoot(i);
+  bindFoot();
+  // left task
+  renderTask(lab);
+  renderNav();
+  document.querySelector('.pane.right .pane-body').scrollTop=0;
+}
+
+function navFoot(i){
+  return `<div class="nav-foot">
+    <button class="btn ghost" id="prevBtn" ${i===0?'disabled':''}>← Previous</button>
+    <button class="btn" id="completeBtn">Mark complete ✓</button>
+    <button class="btn amber" id="nextBtn" ${i===LABS.length-1?'disabled':''}>Next lab →</button>
+  </div>`;
+}
+function bindFoot(){
+  const p=document.getElementById('prevBtn'),n=document.getElementById('nextBtn'),c=document.getElementById('completeBtn');
+  if(p)p.onclick=()=>goLab(current-1);
+  if(n)n.onclick=()=>goLab(current+1);
+  if(c)c.onclick=()=>{markDone(LABS[current].id);c.textContent='Completed ✓';c.classList.add('amber');};
+}
+
+function renderTask(lab){
+  const area=document.getElementById('taskArea'); area.innerHTML='';
+  const t=lab.task;
+  if(t.type==='check'){
+    const ul=t.items.map((it,k)=>`<li data-k="${k}"><span class="ck">✓</span><span>${it}</span></li>`).join('');
+    area.innerHTML=`<div class="task"><div class="th"><div class="ic">▣</div><h3>${t.heading}</h3></div><ul class="checklist">${ul}</ul></div>`;
+    area.querySelectorAll('.checklist li').forEach(li=>li.onclick=()=>{
+      li.classList.toggle('checked');
+      const all=[...area.querySelectorAll('.checklist li')].every(x=>x.classList.contains('checked'));
+      if(all) markDone(lab.id);
+    });
+  } else if(t.type==='identify'){
+    renderIdentify(area,lab);
+  } else if(t.type==='match'){
+    renderMatch(area,lab);
+  } else if(t.type==='eval'){
+    renderEval(area,lab);
+  }
+}
+
+function renderIdentify(area,lab){
+  area.innerHTML=`<div class="task"><div class="th"><div class="ic">◎</div><h3>Identify the 3D object</h3></div>
+    <p style="font-size:13.5px;color:var(--txt-dim);margin-bottom:10px">These three mystery views belong to ONE object. Which 3D shape matches? (Use the dropdown to inspect candidates.)</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="text-align:center"><img id="mysT" style="width:90px;height:90px;border:1px solid var(--line);border-radius:6px;background:#06101c"><div class="mono" style="font-size:9px;color:var(--txt-faint)">TOP</div></div>
+      <div style="text-align:center"><img id="mysF" style="width:90px;height:90px;border:1px solid var(--line);border-radius:6px;background:#06101c"><div class="mono" style="font-size:9px;color:var(--txt-faint)">FRONT</div></div>
+      <div style="text-align:center"><img id="mysS" style="width:90px;height:90px;border:1px solid var(--line);border-radius:6px;background:#06101c"><div class="mono" style="font-size:9px;color:var(--txt-faint)">SIDE</div></div>
+    </div>
+    <div class="qopts" id="idOpts"></div>
+    <div class="feedback" id="idFb"></div>
+  </div>`;
+  // render mystery views
+  document.getElementById('mysT').src=thumbView(IDENTIFY.answer,'top');
+  document.getElementById('mysF').src=thumbView(IDENTIFY.answer,'front');
+  document.getElementById('mysS').src=thumbView(IDENTIFY.answer,'side');
+  const opts=document.getElementById('idOpts');
+  IDENTIFY.options.forEach(k=>{
+    const d=document.createElement('div'); d.className='qopt';
+    d.innerHTML=`<span class="mark"></span><img src="${thumbIso(k)}"><div class="cap">${LIB[k].name}</div>`;
+    d.onclick=()=>{
+      if(area.dataset.answered)return;
+      area.dataset.answered='1';
+      const fb=document.getElementById('idFb');
+      if(k===IDENTIFY.answer){d.classList.add('correct');d.querySelector('.mark').textContent='✓';fb.className='feedback ok';fb.innerHTML='<b>Correct!</b> A rectangular plate with a round hole — circle reads in the front view, the body in top/side. '+ '';markDone(lab.id);}
+      else{d.classList.add('wrong');d.querySelector('.mark').textContent='✕';
+        const right=[...opts.children][IDENTIFY.options.indexOf(IDENTIFY.answer)];right.classList.add('correct');right.querySelector('.mark').textContent='✓';
+        fb.className='feedback no';fb.innerHTML='<b>Not quite.</b> Cross-check the views: the front shows a circle (a hole), the others are thin rectangles. That\'s the Mounting Plate. Try the next lab once you\'ve studied why.';}
+    };
+    opts.appendChild(d);
+  });
+}
+
+function renderMatch(area,lab){
+  area.innerHTML=`<div class="task"><div class="th"><div class="ic">◳</div><h3>Pick the correct TOP view</h3></div>
+    <p style="font-size:13.5px;color:var(--txt-dim);margin-bottom:10px">Here is the 3D object. Looking straight DOWN on it, which is its true TOP (plan) view?</p>
+    <div style="text-align:center;margin-bottom:12px"><img id="matchIso" style="width:150px;height:150px;border:1px solid var(--line);border-radius:8px;background:#050c16"></div>
+    <div class="qopts" id="matchOpts"></div>
+    <div class="feedback" id="matchFb"></div>
+  </div>`;
+  document.getElementById('matchIso').src=thumbIso(MATCH.obj);
+  const opts=document.getElementById('matchOpts');
+  // shuffle a little but keep deterministic: answer is chair's top; distractors are top views of others
+  MATCH.options.forEach(k=>{
+    const d=document.createElement('div'); d.className='qopt';
+    d.innerHTML=`<span class="mark"></span><img src="${thumbView(k,'top')}"><div class="cap">option</div>`;
+    d.onclick=()=>{
+      if(area.dataset.answered)return; area.dataset.answered='1';
+      const fb=document.getElementById('matchFb');
+      if(k===MATCH.answer){d.classList.add('correct');d.querySelector('.mark').textContent='✓';fb.className='feedback ok';fb.innerHTML='<b>Correct!</b> From above the chair you see the square seat, the thin back strip and four corner legs. That\'s the plan view.';markDone(lab.id);}
+      else{d.classList.add('wrong');d.querySelector('.mark').textContent='✕';
+        const right=[...opts.children][MATCH.options.indexOf(MATCH.answer)];right.classList.add('correct');right.querySelector('.mark').textContent='✓';
+        fb.className='feedback no';fb.innerHTML='<b>Look again.</b> The TOP view ignores height — picture a bird directly above the chair. Seat outline + back strip + 4 leg squares.';}
+    };
+    opts.appendChild(d);
+  });
+}
+
+function renderEval(area,lab){
+  let html='<div class="task" style="background:none;border:none;padding:0">';
+  EVAL.forEach((e,i)=>{
+    html+=`<div class="eval-q" data-i="${i}"><div class="qn">QUESTION ${i+1} / ${EVAL.length}</div><h4>${e.q}</h4><div class="opts">`;
+    e.opts.forEach((o,j)=>{ html+=`<div class="eval-opt" data-j="${j}"><span class="dot"></span><span>${o}</span></div>`; });
+    html+=`</div><div class="ex">${e.ex}</div></div>`;
+  });
+  html+=`<button class="btn amber" id="submitEval" style="width:100%;padding:11px;font-size:15px">Submit & reveal score</button>
+    <div class="scorecard" id="scorecard"></div></div>`;
+  area.innerHTML=html;
+  const chosen={};
+  area.querySelectorAll('.eval-q').forEach(q=>{
+    const qi=+q.dataset.i;
+    q.querySelectorAll('.eval-opt').forEach(op=>op.onclick=()=>{
+      if(q.classList.contains('answered'))return;
+      q.querySelectorAll('.eval-opt').forEach(x=>x.classList.remove('sel'));
+      op.classList.add('sel'); chosen[qi]=+op.dataset.j;
+    });
+  });
+  document.getElementById('submitEval').onclick=()=>{
+    let score=0;
+    area.querySelectorAll('.eval-q').forEach(q=>{
+      const qi=+q.dataset.i, e=EVAL[qi]; q.classList.add('answered');
+      q.querySelectorAll('.eval-opt').forEach(op=>{
+        const j=+op.dataset.j;
+        if(j===e.a)op.classList.add('right');
+        else if(j===chosen[qi])op.classList.add('bad');
+      });
+      if(chosen[qi]===e.a)score++;
+    });
+    const pct=Math.round(score/EVAL.length*100);
+    let rank='APPRENTICE DRAFTER', col='var(--amber)';
+    if(pct>=90){rank='MASTER DRAFTER';col='var(--green)';}
+    else if(pct>=70){rank='JUNIOR DESIGNER';col='var(--cyan-bright)';}
+    else if(pct>=50){rank='TRAINEE';col='var(--cyan)';}
+    const circ=2*Math.PI*54, off=circ*(1-pct/100);
+    const sc=document.getElementById('scorecard');
+    sc.innerHTML=`<div class="ring"><svg width="130" height="130"><circle cx="65" cy="65" r="54" fill="none" stroke="#10283a" stroke-width="10"/><circle cx="65" cy="65" r="54" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${off}" transform="rotate(-90 65 65)" style="transition:stroke-dashoffset 1s"/></svg><div class="pct"><b>${pct}%</b><span>SCORE</span></div></div>
+      <h2>${score} / ${EVAL.length} correct</h2>
+      <div class="rank" style="color:${col}">RANK: ${rank}</div>
+      <p>${pct>=70?'You can read and create orthographic views with real confidence. You\'re ready to model in Tinkercad and Blender — head to the final lab.':'Solid start. Revisit the labs on alignment and hidden lines, then run the evaluation again — mastery here makes 3D modelling far easier.'}</p>
+      <button class="btn" style="margin-top:12px" onclick="document.querySelector('[data-lab-next]').click()">Continue to 3D modelling →</button>`;
+    sc.classList.add('show');
+    if(pct>=70) markDone(lab.id);
+    sc.scrollIntoView({behavior:'smooth',block:'center'});
+  };
+}
+
+/* =========================================================================
+   9. PROGRESS PERSISTENCE (safe-guarded)
+   ========================================================================= */
+function loadProgress(){ try{return JSON.parse(localStorage.getItem('orthoforge')||'{}');}catch(e){return {};} }
+function saveProgress(){ try{localStorage.setItem('orthoforge',JSON.stringify(done));}catch(e){} }
+
+/* expose a hidden "next" trigger for the scorecard button */
+function attachNextProxy(){
+  if(document.querySelector('[data-lab-next]'))return;
+  const b=document.createElement('button'); b.style.display='none'; b.setAttribute('data-lab-next','');
+  b.onclick=()=>goLab(Math.min(current+1,LABS.length-1)); document.body.appendChild(b);
+}
+
+/* =========================================================================
+   10. INIT
+   ========================================================================= */
+resize();
+applyAngleLayout();
+applyCam();
+renderNav();
+attachNextProxy();
+goLab(0);
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
