@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THE BRIDGES — Digital World in 3D · Between-Lab Activities</title>
+<style>
+:root{
+  --ink:#12151a;
+  --panel:#1b2027;
+  --panel2:#232a33;
+  --paper:#f4efe6;
+  --paper2:#e9e2d3;
+  --orange:#ff6a2b;
+  --orange2:#ff8d57;
+  --yellow:#ffc83d;
+  --teal:#2fd4b5;
+  --blue:#4aa8ff;
+  --red:#ff4d5e;
+  --line:#39424e;
+  --soft:#8e99a8;
+  --shadow:0 18px 50px rgba(0,0,0,.45);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--ink);
+  color:var(--paper);
+  font-family:Georgia,'Times New Roman',serif;
+  overflow:hidden;
+  background-image:
+    radial-gradient(1200px 600px at 80% -10%, rgba(255,106,43,.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(74,168,255,.08), transparent 60%),
+    repeating-linear-gradient(0deg, transparent 0 39px, rgba(255,255,255,.025) 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, rgba(255,255,255,.025) 39px 40px);
+}
+.stencil{
+  font-family:Impact,Haettenschweiler,'Arial Narrow Bold','Franklin Gothic Medium',sans-serif;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  font-weight:400;
+}
+.mono{font-family:'Courier New',Courier,monospace}
+
+/* ============ TOP BAR ============ */
+#topbar{
+  position:fixed;top:0;left:0;right:0;height:56px;z-index:50;
+  display:flex;align-items:center;gap:14px;padding:0 18px;
+  background:linear-gradient(180deg, rgba(18,21,26,.96), rgba(18,21,26,.88));
+  border-bottom:2px solid var(--orange);
+}
+#topbar .logo{
+  display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;
+}
+#topbar .logo .chip{
+  background:var(--orange);color:var(--ink);padding:3px 9px;font-size:20px;
+  transform:skewX(-8deg);
+}
+#topbar .logo .sub{font-size:12px;color:var(--soft);letter-spacing:.18em;text-transform:uppercase}
+#topbar .spacer{flex:1}
+#crumb{font-size:13px;color:var(--soft);letter-spacing:.1em;text-transform:uppercase}
+.tbtn{
+  background:var(--panel2);border:1px solid var(--line);color:var(--paper);
+  padding:7px 14px;font-size:13px;cursor:pointer;letter-spacing:.08em;text-transform:uppercase;
+  font-family:inherit;transition:.15s;
+}
+.tbtn:hover{border-color:var(--orange);color:var(--orange2)}
+.tbtn.hot{background:var(--orange);border-color:var(--orange);color:var(--ink);font-weight:bold}
+
+/* ============ HOME ============ */
+#home{
+  position:absolute;inset:56px 0 0 0;overflow:auto;padding:34px 44px 60px;
+}
+#home h1{
+  font-size:clamp(40px,6vw,76px);line-height:.95;color:var(--paper);
+}
+#home h1 .hl{color:var(--orange)}
+#home .tag{
+  margin-top:10px;font-size:17px;color:var(--soft);font-style:italic;max-width:760px;
+}
+#grid{
+  margin-top:30px;display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px;
+}
+.card{
+  background:linear-gradient(160deg,var(--panel),var(--panel2));
+  border:1px solid var(--line);padding:18px 18px 16px;cursor:pointer;position:relative;
+  transition:transform .15s, border-color .15s, box-shadow .15s;overflow:hidden;
+}
+.card:hover{transform:translateY(-4px);border-color:var(--orange);box-shadow:var(--shadow)}
+.card .num{
+  position:absolute;right:-6px;top:-18px;font-size:96px;color:rgba(255,255,255,.05);
+  pointer-events:none;
+}
+.card .route{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal)}
+.card h3{font-size:26px;margin:6px 0 6px;color:var(--paper)}
+.card p{font-size:13.5px;color:var(--soft);line-height:1.45}
+.card .meta{
+  margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;
+}
+.pill{
+  font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;padding:3px 9px;
+  border:1px solid var(--line);color:var(--soft);
+}
+.pill.time{border-color:var(--yellow);color:var(--yellow)}
+.card .done{
+  position:absolute;left:0;top:0;height:4px;background:var(--teal);width:0;transition:.3s;
+}
+.card.complete .done{width:100%}
+.card.complete .route::after{content:" ✓ run";color:var(--teal)}
+
+/* ============ ACTIVITY VIEW ============ */
+#stage{
+  position:absolute;inset:56px 0 0 0;display:none;grid-template-columns:300px 1fr;
+}
+#stage.on{display:grid}
+
+/* left rail */
+#rail{
+  background:var(--panel);border-right:1px solid var(--line);padding:22px 20px;
+  display:flex;flex-direction:column;gap:14px;overflow:auto;
+}
+#rail .route{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--teal)}
+#rail h2{font-size:34px;line-height:1;color:var(--paper)}
+#rail .hook{font-style:italic;color:var(--soft);font-size:14.5px;line-height:1.5;border-left:3px solid var(--orange);padding-left:10px}
+#rail .matbox{
+  background:var(--paper);color:var(--ink);padding:14px 14px 12px;
+  box-shadow:4px 4px 0 rgba(0,0,0,.35);transform:rotate(-.6deg);
+}
+#rail .matbox h4{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#8a5a17;margin-bottom:7px}
+#rail .matbox li{font-size:13.5px;margin-left:16px;margin-bottom:3px;line-height:1.35}
+#rail .navsec{margin-top:auto;display:flex;flex-direction:column;gap:8px}
+
+/* main column */
+#main{display:flex;flex-direction:column;min-width:0}
+#phasewrap{flex:1;overflow:auto;padding:30px 40px 110px}
+.phase{
+  max-width:980px;margin:0 auto 18px;display:none;animation:rise .35s ease both;
+}
+.phase.show{display:block}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.phead{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.pbadge{
+  background:var(--orange);color:var(--ink);font-size:15px;padding:4px 12px;transform:skewX(-8deg);
+  white-space:nowrap;
+}
+.pbadge.cool{background:var(--blue)}
+.pbadge.warn{background:var(--yellow)}
+.pbadge.win{background:var(--teal)}
+.phead h3{font-size:30px;color:var(--paper)}
+.phead .ptime{margin-left:auto;font-size:13px;color:var(--soft);white-space:nowrap}
+.pbody{
+  background:linear-gradient(160deg,var(--panel),var(--panel2));
+  border:1px solid var(--line);padding:20px 24px;font-size:16.5px;line-height:1.6;
+}
+.pbody p{margin-bottom:10px}
+.pbody p:last-child{margin-bottom:0}
+.pbody .say{
+  background:rgba(255,200,61,.08);border-left:3px solid var(--yellow);
+  padding:10px 14px;margin:10px 0;font-style:italic;color:#ffe9b3;
+}
+.pbody .say b{color:var(--yellow);font-style:normal;font-size:12px;letter-spacing:.14em;text-transform:uppercase;display:block;margin-bottom:3px}
+.pbody ul{margin:8px 0 8px 22px}
+.pbody li{margin-bottom:6px}
+.pbody .tip{font-size:13.5px;color:var(--soft);font-style:italic}
+.timerlink{
+  display:inline-block;margin-top:8px;background:var(--panel);border:1px dashed var(--yellow);
+  color:var(--yellow);padding:6px 14px;font-size:13px;cursor:pointer;letter-spacing:.08em;
+}
+.timerlink:hover{background:rgba(255,200,61,.12)}
+.bridgecard{
+  background:var(--paper);color:var(--ink);padding:24px 28px;position:relative;
+  box-shadow:8px 8px 0 var(--orange);
+}
+.bridgecard h4{font-size:14px;letter-spacing:.2em;text-transform:uppercase;color:#b34a12;margin-bottom:8px}
+.bridgecard p{font-size:17.5px;line-height:1.55}
+.bridgecard .next{
+  margin-top:14px;font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:#b34a12;font-weight:bold;
+}
+
+/* footer controls */
+#deckctl{
+  position:fixed;bottom:0;left:300px;right:0;height:74px;z-index:40;
+  background:linear-gradient(0deg, rgba(18,21,26,.97), rgba(18,21,26,.86));
+  border-top:1px solid var(--line);display:none;align-items:center;gap:14px;padding:0 28px;
+}
+#deckctl.on{display:flex}
+#revealBtn{
+  background:var(--orange);color:var(--ink);border:none;font-size:18px;
+  padding:13px 30px;cursor:pointer;letter-spacing:.06em;
+  box-shadow:0 6px 0 #b13c0f;transition:.1s;
+}
+#revealBtn:active{transform:translateY(3px);box-shadow:0 3px 0 #b13c0f}
+#revealBtn:disabled{background:var(--panel2);color:var(--soft);box-shadow:none;cursor:default}
+#phasedots{display:flex;gap:7px;margin-left:6px}
+.dot{width:11px;height:11px;border:1px solid var(--line);transform:rotate(45deg);transition:.2s}
+.dot.lit{background:var(--orange);border-color:var(--orange)}
+#deckctl .hintkey{margin-left:auto;font-size:12px;color:var(--soft)}
+#deckctl .hintkey b{color:var(--paper);border:1px solid var(--line);padding:1px 7px;font-style:normal}
+
+/* ============ TIMER OVERLAY ============ */
+#timerOv{
+  position:fixed;inset:0;background:rgba(10,12,15,.93);z-index:100;display:none;
+  align-items:center;justify-content:center;flex-direction:column;gap:16px;
+}
+#timerOv.on{display:flex}
+#timerLbl{font-size:22px;color:var(--soft);letter-spacing:.2em;text-transform:uppercase}
+#timerBig{
+  font-size:clamp(120px,26vw,300px);line-height:1;color:var(--paper);
+  font-variant-numeric:tabular-nums;
+}
+#timerBig.low{color:var(--red);animation:pulse .9s infinite}
+@keyframes pulse{50%{opacity:.55}}
+#timerCtls{display:flex;gap:12px}
+#timerCtls .tbtn{font-size:16px;padding:10px 22px}
+
+/* ============ SCOREBOARD ============ */
+#scoreOv{
+  position:fixed;inset:0;background:rgba(10,12,15,.93);z-index:100;display:none;
+  align-items:center;justify-content:center;
+}
+#scoreOv.on{display:flex}
+#scorePanel{
+  background:var(--panel);border:1px solid var(--line);padding:30px 36px;min-width:540px;
+  box-shadow:var(--shadow);
+}
+#scorePanel h2{font-size:38px;color:var(--orange);margin-bottom:18px}
+.steam{
+  display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;
+  padding:8px 0;border-bottom:1px dashed var(--line);
+}
+.steam input{
+  background:transparent;border:none;color:var(--paper);font-size:20px;font-family:inherit;
+  border-bottom:1px solid transparent;width:230px;
+}
+.steam input:focus{outline:none;border-bottom:1px solid var(--orange)}
+.steam .pts{font-size:30px;min-width:70px;text-align:right;color:var(--yellow);font-variant-numeric:tabular-nums}
+.sbtn{
+  width:42px;height:42px;font-size:22px;background:var(--panel2);border:1px solid var(--line);
+  color:var(--paper);cursor:pointer;
+}
+.sbtn:hover{border-color:var(--teal);color:var(--teal)}
+#scoreFoot{margin-top:18px;display:flex;gap:10px}
+
+/* confetti */
+.confetti{position:fixed;top:-20px;width:10px;height:16px;z-index:200;pointer-events:none}
+
+@media (max-width:900px){
+  #stage{grid-template-columns:1fr}
+  #rail{display:none}
+  #deckctl{left:0}
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="logo" onclick="goHome()">
+    <span class="chip stencil">THE BRIDGES</span>
+    <span class="sub">Digital World in 3D · between-lab activities</span>
+  </div>
+  <div class="spacer"></div>
+  <span id="crumb"></span>
+  <button class="tbtn" onclick="openScore()">⚑ Scoreboard</button>
+  <button class="tbtn" onclick="openTimer(300,'Quick timer')">⏱ Timer</button>
+</div>
+
+<div id="home">
+  <h1 class="stencil">Labs build the <span class="hl">skill.</span><br>Bridges build the <span class="hl">itch.</span></h1>
+  <p class="tag">Nine hands-on, talk-heavy activities that sit between the ten Fusion 360 labs. Each one ends on a cliffhanger that the next lab resolves. Click a card, press <b>Reveal</b> to pace the room, use the timers, keep score.</p>
+  <div id="grid"></div>
+</div>
+
+<div id="stage">
+  <aside id="rail">
+    <div class="route" id="rRoute"></div>
+    <h2 class="stencil" id="rTitle"></h2>
+    <div class="hook" id="rHook"></div>
+    <div class="matbox">
+      <h4>Grab from the junk box</h4>
+      <ul id="rMats"></ul>
+    </div>
+    <div class="navsec">
+      <button class="tbtn" onclick="goHome()">← All bridges</button>
+      <button class="tbtn" id="markDone" onclick="toggleDone()">Mark as run ✓</button>
+    </div>
+  </aside>
+  <div id="main">
+    <div id="phasewrap"></div>
+  </div>
+</div>
+
+<div id="deckctl">
+  <button id="revealBtn" class="stencil" onclick="reveal()">REVEAL ▸</button>
+  <div id="phasedots"></div>
+  <span class="hintkey">Space / <b>→</b> reveal &nbsp;·&nbsp; <b>T</b> timer &nbsp;·&nbsp; <b>S</b> scoreboard &nbsp;·&nbsp; <b>Esc</b> home</span>
+</div>
+
+<div id="timerOv">
+  <div id="timerLbl">Timer</div>
+  <div id="timerBig" class="stencil">5:00</div>
+  <div id="timerCtls">
+    <button class="tbtn hot" id="timerGo" onclick="timerToggle()">START</button>
+    <button class="tbtn" onclick="timerAdd(60)">+1 min</button>
+    <button class="tbtn" onclick="timerAdd(-60)">−1 min</button>
+    <button class="tbtn" onclick="closeTimer()">Close</button>
+  </div>
+</div>
+
+<div id="scoreOv">
+  <div id="scorePanel">
+    <h2 class="stencil">Scoreboard</h2>
+    <div id="steams"></div>
+    <div id="scoreFoot">
+      <button class="tbtn" onclick="addTeam()">+ Team</button>
+      <button class="tbtn" onclick="resetScores()">Reset points</button>
+      <button class="tbtn hot" onclick="closeScore()">Done</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   THE BRIDGES — between-lab activities for "The Digital World in 3D"
+   Single-file, offline, GitHub Pages compatible. No dependencies.
+   ===================================================================== */
+
+const BRIDGES = [
+{
+  id:"b1", from:"After Lab 1 (First Contact)", to:"Before Lab 2 (Phone Stand)",
+  title:"The Junk Stand Grand Prix",
+  hook:"Before they CAD a phone stand, they have to fail at building one. Failure is the design brief.",
+  time:"≈ 25 min", vibe:"Build challenge",
+  blurb:"Teams build a phone stand from absolute rubbish in 8 minutes, survive the Shake Test, then steal the winner's measurements.",
+  mats:["Scrap cardboard, paper, paddle-pop sticks","Sticky tape & Blu-Tack","A few rulers + protractors","One sacrificial (teacher's) phone","Sticky notes"],
+  phases:[
+    {b:"THE HOOK", t:"Sell it", time:"3 min", body:`
+      <p>Teams of 3. Show your phone propped pathetically against a water bottle.</p>
+      <div class="say"><b>Say this</b>"This is the world's worst phone stand. In 8 minutes, your team will build something better out of garbage. It must hold a real phone in landscape, on its own, and survive the Shake Test. Winner gets immortalised on the scoreboard."</div>
+      <p class="tip">The phrase "Shake Test" does a lot of work here. Don't explain it yet — let them imagine the worst.</p>`},
+    {b:"THE BUILD", t:"8 minutes of chaos", time:"8 min", badge:"warn", body:`
+      <p>Dump the junk box. Start the timer. Walk around saying unhelpful things like <i>"interesting choice"</i> and <i>"bold."</i></p>
+      <ul>
+        <li>Rule 1: phone must sit in <b>landscape</b> (video-watching position).</li>
+        <li>Rule 2: no hands, no leaning on walls or pencil cases.</li>
+        <li>Rule 3: when the buzzer goes, hands off.</li>
+      </ul>
+      <span class="timerlink" onclick="openTimer(480,'BUILD PHASE')">⏱ Start 8:00 build timer</span>`},
+    {b:"THE SHAKE TEST", t:"Judgement", time:"6 min", badge:"cool", body:`
+      <p>Each stand gets the phone for 10 seconds, then you bump the desk twice with your fist. Survivors advance. Then the tiebreaker: which one would they <b>actually use at home</b>? Class votes by pointing.</p>
+      <div class="say"><b>Ask the room</b>"Why did the winners win? Don't say 'it was sturdy' — tell me <i>where</i> the strength came from."</div>
+      <p>Fish for: wide base, low centre of gravity, a lip at the front so the phone can't slide, an angle that leans back. Award scoreboard points for the win + best answer.</p>`},
+    {b:"THE HEIST", t:"Steal the numbers", time:"5 min", body:`
+      <p>Now turn the winning stand into <b>data</b>. Teams measure it with rulers and protractors and stick the numbers on the board:</p>
+      <ul>
+        <li>Base depth (front to back) — mm</li>
+        <li>Back-rest lean angle — degrees</li>
+        <li>Front lip height — mm</li>
+      </ul>
+      <p class="tip">It doesn't matter if the measurements are rough. What matters is that a physical object just became three numbers — which is literally what CAD is.</p>`},
+    {b:"THE BRIDGE", t:"Cliffhanger", time:"2 min", badge:"win", bridge:`
+      Tape can't be 3D printed. In the next lab you'll rebuild today's winning design in <b>Fusion 360</b> — same base, same lean, same lip — except this version could actually be printed, sold, and wouldn't embarrass you on your desk. Bring today's numbers. <span class="next">→ Lab 2: The Phone Stand</span>`}
+  ]
+},
+{
+  id:"b2", from:"After Lab 2 (Phone Stand)", to:"Before Lab 3 (Desk Caddy)",
+  title:"Pocket Archaeology",
+  hook:"You can't design a container until you've measured the chaos it has to contain. Enter: the caliper.",
+  time:"≈ 20 min", vibe:"Measure-off",
+  blurb:"Students excavate their own pockets and pencil cases, then race to measure the loot with digital calipers — accuracy wins, vibes lose.",
+  mats:["Digital calipers (1 per pair if possible)","Rulers as backup","A4 sheets + markers","One 'mystery object' per team (you pre-measure these)","Sticky notes"],
+  phases:[
+    {b:"THE DIG", t:"Excavate", time:"4 min", body:`
+      <p>Pairs. Everyone empties pockets / pencil case onto an A4 sheet — their personal "archaeological site." Each pair picks the <b>5 weirdest objects</b> between them.</p>
+      <div class="say"><b>Say this</b>"Every one of these objects lives loose in a bag or rolls around a desk. Today we find out their true size — because next week, you're building them a home."</div>`},
+    {b:"CALIPER BOOTCAMP", t:"60-second skill", time:"4 min", badge:"cool", body:`
+      <p>Demo the caliper once: outside jaws, inside jaws, the depth rod at the end, zero button. That's it — 60 seconds.</p>
+      <ul>
+        <li>Measure a marker pen live on the projector camera if you can.</li>
+        <li>Key line: <b>"Rulers guess. Calipers know."</b></li>
+        <li>Show that 14.8 mm and 15.2 mm <i>look</i> identical to the eye — and that 0.4 mm is the difference between a pen that fits a hole and one that doesn't.</li>
+      </ul>`},
+    {b:"THE MEASURE-OFF", t:"Race", time:"7 min", badge:"warn", body:`
+      <p>Hand each team a <b>mystery object</b> you measured last night (whiteboard marker, glue stick, battery, dice…). They get 90 seconds per round to caliper its diameter/width and write the answer down. Closest to your secret number scores.</p>
+      <ul>
+        <li>Round 1: diameter of a round thing</li>
+        <li>Round 2: thickness of a flat thing</li>
+        <li>Round 3 (sting): <b>inside</b> diameter of something — tape roll, pen cap — forces them to find the inside jaws</li>
+      </ul>
+      <span class="timerlink" onclick="openTimer(90,'MEASURE ROUND')">⏱ 90-second round timer</span>`},
+    {b:"THE BLUEPRINT", t:"Map the chaos", time:"4 min", body:`
+      <p>Pairs sketch a rough rectangle on A4 — a bird's-eye desk caddy — and slot sticky notes in for compartments: <i>"pens Ø10 × 6 of them," "earbuds case 60×45," "the sacred rubber."</i> No neat drawing required. Numbers required.</p>`},
+    {b:"THE BRIDGE", t:"Cliffhanger", time:"1 min", badge:"win", bridge:`
+      That sticky-note rectangle is a <b>floor plan</b>. Next lab you extrude it into a real desk caddy with walls and compartments — and if your measurements were lazy, your pens won't fit. The caliper doesn't lie. <span class="next">→ Lab 3: The Desk Caddy</span>`}
+  ]
+},
+{
+  id:"b3", from:"After Lab 3 (Desk Caddy)", to:"Before Lab 4 (Pi 5 Case)",
+  title:"Operation: Naked Pi",
+  hook:"A $130 computer with zero armour gets passed around the room. Suddenly everyone cares about cases.",
+  time:"≈ 20 min", vibe:"Hazard hunt + datasheet race",
+  blurb:"Students handle a bare Raspberry Pi 5, hunt for the ways it could die, then race through a real datasheet to extract the dimensions that will save it.",
+  mats:["2–3 bare Raspberry Pi 5 boards (from the fleet)","Anti-static bags to rest them on","Printed Pi 5 mechanical drawing / datasheet page per team","Highlighters","A drink bottle (prop — keep it sealed)"],
+  phases:[
+    {b:"THE REVEAL", t:"Meet the patient", time:"4 min", body:`
+      <p>Pass the bare Pi 5 boards around on their anti-static bags. Let them actually hold a real computer the size of a sandwich.</p>
+      <div class="say"><b>Say this</b>"This board costs about $130 and it runs our whole cyber lab. Right now it has the survival odds of a snail on a footpath. Your job: figure out everything in this room that could kill it."</div>
+      <p class="tip">Place the sealed drink bottle ominously next to one. Say nothing.</p>`},
+    {b:"SPOT THE KILLER", t:"Hazard hunt", time:"6 min", badge:"warn", body:`
+      <p>Teams list every way a naked Pi dies in a classroom. 3 minutes, longest <i>legit</i> list wins points. Expect: spilled drinks, dropped on floor, pencil shorts the GPIO pins, static zap, crushed in a bag, SD card snapped, dust, someone "just wanted to touch the shiny bit."</p>
+      <div class="say"><b>Then ask</b>"Great — so a case fixes all of it? Wrap it in a solid plastic brick?" …Wait for someone to realise: <b>it would cook itself.</b> No vents, no ports, no SD access. A case is a negotiation, not a box.</div>`},
+    {b:"THE DATASHEET RACE", t:"Find the numbers", time:"7 min", badge:"cool", body:`
+      <p>Hand out the printed Pi 5 mechanical drawing. This is a real engineering document — the same one professionals use. Race format, highlighters out, first correct answer scores:</p>
+      <ul>
+        <li>How long and wide is the board? <span class="tip">(85 × 56 mm)</span></li>
+        <li>How far apart are the mounting holes? <span class="tip">(58 × 49 mm grid)</span></li>
+        <li>What diameter are the mounting holes? <span class="tip">(2.7 mm — M2.5 screws)</span></li>
+        <li>Which edge has the USB ports? Which has the SD slot?</li>
+      </ul>
+      <p>Debrief line: <b>"Nobody measured the Pi with a ruler. The answers were published. Real designers read first, measure second."</b></p>`},
+    {b:"THE BRIDGE", t:"Cliffhanger", time:"2 min", badge:"win", bridge:`
+      Next lab, you design the case that protects our actual fleet — built from the datasheet numbers you just found, with standoffs landing on that exact 58 × 49 grid. If your numbers are wrong, the screws miss. No pressure. <span class="next">→ Lab 4: The Pi 5 Case</span>`}
+  ]
+},
+{
+  id:"b4", from:"After Lab 4 (Pi 5 Case)", to:"Before Lab 5 (Pi Lid)",
+  title:"The Fit Games",
+  hook:"How big is a gap that feels like 'just right'? Smaller than anyone in the room thinks.",
+  time:"≈ 20 min", vibe:"Tactile stations",
+  blurb:"Hands-on stations where students feel the difference between jammed, perfect and sloppy fits — then discover that 'perfect' is a gap thinner than a hair... times two.",
+  mats:["Jars + lids, Tic Tac boxes, Pringles lids, click pens","Paper (80gsm ≈ 0.1 mm per sheet) cut into strips","A box and a slightly-smaller box / container that nests","Calipers from Bridge 2","Two LEGO bricks (the secret weapon)"],
+  phases:[
+    {b:"THE LIE", t:"Open with a trap", time:"3 min", body:`
+      <p>Hold up a jar and screw the lid on.</p>
+      <div class="say"><b>Say this</b>"This lid is exactly the same size as this jar, right? It fits perfectly." …Let them agree. Then: "If it were <i>exactly</i> the same size, it would never go on. Every lid in the universe is slightly too big. The whole game is: how much too big?"</div>`},
+    {b:"FIT STATIONS", t:"Touch everything", time:"8 min", badge:"warn", body:`
+      <p>Rotate pairs through stations. At each one they classify the fit: <b>JAM / SNUG / SLOP</b> and rank them.</p>
+      <ul>
+        <li><b>Station 1:</b> Pringles lid (snug snap) vs jam jar lid (thread) vs takeaway container (slop).</li>
+        <li><b>Station 2:</b> click-pen cap on and off — feel the snap point.</li>
+        <li><b>Station 3:</b> two LEGO bricks. The most precisely toleranced toy on Earth — clutch fit accurate to about 0.01 mm.</li>
+        <li><b>Station 4 — the Shim Game:</b> a lid/box that nests with a visible gap. Teams add paper strips (0.1 mm each) into the gap until it jams. Count the sheets → that's the clearance in tenths of a millimetre.</li>
+      </ul>`},
+    {b:"THE NUMBER", t:"Reveal", time:"5 min", badge:"cool", body:`
+      <p>Collect the Shim Game counts on the board. Most gaps that "feel right" land around 2–4 sheets — <b>0.2 to 0.4 mm</b>.</p>
+      <div class="say"><b>Ask</b>"A human hair is about 0.08 mm. So a perfect lid fit is roughly two to four hairs of breathing room. Could you draw that gap by eye?" — No. Which is exactly why CAD lets you type 0.2.</div>
+      <p class="tip">If a team's count was wildly high, ask whether their lid rattles. Slop is also a choice — sometimes the right one (takeaway containers want easy-on).</p>`},
+    {b:"THE BRIDGE", t:"Cliffhanger", time:"2 min", badge:"win", bridge:`
+      Your Pi case from last lab is currently a convertible — open roof. Next lab you build the lid, and it has to land in that 0.2 mm sweet spot: too tight and it never clicks on, too loose and it rattles off in a school bag. You now know what 0.2 mm <i>feels</i> like. Time to type it. <span class="next">→ Lab 5: The Pi Lid</span>`}
+  ]
+},
+{
+  id:"b5", from:"After Lab 5 (Pi Lid)", to:"Before Lab 6 (Desk Hook)",
+  title:"Hold My Bag",
+  hook:"A ruler, a desk edge and a stack of coins teach more about cantilevers than any diagram ever will.",
+  time:"≈ 25 min", vibe:"Strength challenge",
+  blurb:"Teams discover why things snap at the wall, not at the tip — by loading rulers, breaking paper hooks, and betting on where the failure happens.",
+  mats:["30 cm rulers (the cheap flexible kind)","Coins or steel nuts as weights","Paper + tape for hook building","A real school bag (heavy one)","Masking tape for wall mounting","Phone for slow-mo video (optional, excellent)"],
+  phases:[
+    {b:"THE BET", t:"Place your bets", time:"4 min", body:`
+      <p>Slide a ruler off the desk edge so 20 cm hangs over. Hold it down with one hand.</p>
+      <div class="say"><b>Say this</b>"I'm going to stack coins on the far end until something gives. Where does it bend the most — out at the coins, or back here at the desk edge? Lock in your bets."</div>
+      <p>Stack coins. The ruler curves hardest <b>at the desk edge</b> — the support — not at the load. That spot is doing all the work. Engineers call it the <i>root</i>. Things break at the root.</p>`},
+    {b:"LEVER ARM WARS", t:"Feel the physics", time:"5 min", badge:"cool", body:`
+      <p>Same ruler, two setups: 10 cm overhang vs 25 cm overhang, same coins at the tip. The long overhang bends dramatically more.</p>
+      <ul>
+        <li>Punchline: <b>distance multiplies force</b>. Double the stick-out ≈ way more than double the bending.</li>
+        <li>Real-world hook translation: a long elegant hook is a weak hook. Short and chunky wins.</li>
+      </ul>`},
+    {b:"THE PAPER HOOK DERBY", t:"Build & break", time:"10 min", badge:"warn", body:`
+      <p>Teams get 5 sheets of paper + tape: build a hook, tape it to the wall (same tape budget each), and we hang an actual school bag off it. Heaviest survival wins; ties broken by least material used.</p>
+      <ul>
+        <li>Watch for the discoveries: rolling paper into tubes (hollow sections!), triangle gussets under the hook, fat roots and skinny tips.</li>
+        <li>Film the failures in slow-mo. Every single one breaks at the root. Replay it. Let them see they predicted it.</li>
+      </ul>
+      <span class="timerlink" onclick="openTimer(420,'HOOK BUILD')">⏱ 7:00 build timer</span>`},
+    {b:"THE BRIDGE", t:"Cliffhanger", time:"3 min", badge:"win", bridge:`
+      Next lab: a 3D-printed desk hook for your headphones and bag. You already know the secrets — short overhang, thick root, support the load path. The teams whose paper hooks died first know <i>exactly</i> what not to draw. <span class="next">→ Lab 6: The Desk Hook</span>`}
+  ]
+},
+{
+  id:"b6", from:"After Lab 6 (Desk Hook)", to:"Before Lab 7 (Carabiner)",
+  title:"Snap or Spring",
+  hook:"Some plastic snaps. Some plastic springs back. Your keys' lives depend on knowing which is which.",
+  time:"≈ 20 min", vibe:"Teardown + destruction lab",
+  blurb:"Students bend things until they break (or don't), tear down real carabiners, and discover that flexibility is a feature you can design — not a property you're stuck with.",
+  mats:["Real carabiners — a climbing-rated one and $2 keyring ones","Paddle-pop sticks, cable ties, old pen clips, plastic spoons","A plastic takeaway lid (the snappy hinge kind)","Safety glasses if you're snapping things properly"],
+  phases:[
+    {b:"BEND IT", t:"Destruction stations", time:"7 min", badge:"warn", body:`
+      <p>Each team gets a bend-test kit: paddle-pop stick, cable tie, pen clip, plastic spoon. Bend each one slowly. Sort into two piles: <b>SNAPPERS</b> (break suddenly) and <b>SPRINGERS</b> (flex and return).</p>
+      <ul>
+        <li>Paddle-pop stick → snapper (after a fight)</li>
+        <li>Cable tie → springer, almost unbreakable by hand</li>
+        <li>Pen clip → springer… until it isn't</li>
+        <li>Spoon → dramatic snapper, very satisfying</li>
+      </ul>
+      <div class="say"><b>Key question</b>"The cable tie and the spoon are both plastic. Why do they behave like different materials?" Fish for: it's not just the material — it's the <b>shape</b>. Thin = springy. Thick = stiff. Same plastic.</div>`},
+    {b:"THE TEARDOWN", t:"Meet the carabiner", time:"6 min", badge:"cool", body:`
+      <p>Pass around the real carabiners. Work the gates. Compare the climbing one to the $2 keyring one.</p>
+      <ul>
+        <li>Find the stamped rating on the climbing one (kN — that's <i>thousands</i> of newtons, roughly a small car hanging off it).</li>
+        <li>The keyring one says <b>"NOT FOR CLIMBING"</b> — ask why a clip needs a legal disclaimer. (Because people are people.)</li>
+        <li>Spot the spring in the metal gate. Now the trick question: <b>a 3D-printed carabiner can't have a metal spring. So what springs?</b></li>
+      </ul>
+      <p>Answer they should reach: the plastic itself — a thin, deliberately springy section. The pen clip pile from station one just became the design solution.</p>`},
+    {b:"FLEX BY DESIGN", t:"Prove it", time:"5 min", body:`
+      <p>Hand out the takeaway lids with living hinges (or just flex the pen clips again). One piece of plastic, thick where it must be stiff, thin where it must flex — thousands of cycles, no metal parts.</p>
+      <div class="say"><b>Say this</b>"You've been told thickness = strength all term. True. Today's twist: <i>thinness = springiness</i>, and sometimes that's the strength you need."</div>`},
+    {b:"THE BRIDGE", t:"Cliffhanger", time:"2 min", badge:"win", bridge:`
+      Next lab you design a carabiner clip with a printable plastic gate — a part that must be stiff in the body and springy at the gate, in one piece, with no metal. You've already held the answer in your hands. <span class="next">→ Lab 7: The Carabiner</span>`}
+  ]
+},
+{
+  id:"b7", from:"After Lab 7 (Carabiner)", to:"Before Lab 8 (Bag Clip)",
+  title:"The Chip Crisis",
+  hook:"Stale chips are a solvable engineering problem. Today the class solves it — competitively.",
+  time:"≈ 20 min", vibe:"Grip-off tournament",
+  blurb:"A tournament of real-world clips — pegs, binder clips, hair clips, folded bags — graded on one brutal test: hold a loaded chip bag upside down. Then a teardown of why winners grip.",
+  mats:["Chip bags (empty, plus one sealed bag of chips as the trophy)","Coins/nuts to load the bags","Clothes pegs, binder clips, bulldog clips, hair claws, bread tags","Anything else clip-like from home — invite contributions"],
+  phases:[
+    {b:"THE CRISIS", t:"Stakes", time:"3 min", body:`
+      <div class="say"><b>Say this</b>"Somewhere in your house right now there is an open chip bag going stale, folded over and held by hope. This is a national crisis. Today we settle, scientifically, what actually keeps a bag shut — and the winning team takes home the chips."</div>
+      <p class="tip">Yes, the sealed chip bag prize. ~$5 buys you 20 minutes of total engagement.</p>`},
+    {b:"THE GRIP-OFF", t:"Tournament", time:"9 min", badge:"warn", body:`
+      <p>Load an empty chip bag with coins. Each clip seals the bag, then the bag hangs upside down for 10 seconds, then two firm shakes. Survive → next round with more coins. Bracket it on the board like a sports final.</p>
+      <ul>
+        <li>Entrants: peg, binder clip, bulldog, hair claw, bread tag, and "the fold" (no clip, just rolled).</li>
+        <li>Teams predict the podium before round one — points for correct predictions.</li>
+        <li>Surprise that usually lands: the humble fold does better than expected, the peg does worse.</li>
+      </ul>
+      <span class="timerlink" onclick="openTimer(540,'GRIP-OFF')">⏱ 9:00 tournament clock</span>`},
+    {b:"THE AUTOPSY", t:"Why winners win", time:"6 min", badge:"cool", body:`
+      <p>Open up the finalists and interrogate them:</p>
+      <ul>
+        <li><b>Jaw length:</b> binder clips grip a long line, pegs pinch one point. Line beats point.</li>
+        <li><b>Spring force:</b> where does the squeeze come from? Metal spring (peg), bent metal (binder), or flexed plastic (claw)?</li>
+        <li><b>Teeth / texture:</b> does the jaw bite the bag or rely on pressure alone?</li>
+        <li><b>One-handed?</b> The best clip in the world fails if it's annoying to use. Usability is a spec.</li>
+      </ul>
+      <div class="say"><b>Land the point</b>"Every winner has the same recipe: long jaws + constant spring pressure + easy to open. That recipe is next lab's shopping list."</div>`},
+    {b:"THE BRIDGE", t:"Cliffhanger", time:"2 min", badge:"win", bridge:`
+      Next lab you design a 3D-printable bag clip — one piece, no metal spring, long jaws, real bite. It goes home, it lives on a chip bag, and your family will actually use it. That's the whole point of this subject in one object. <span class="next">→ Lab 8: The Bag Clip</span>`}
+  ]
+},
+{
+  id:"b8", from:"After Lab 8 (Bag Clip)", to:"Before Lab 9 (Stash Pod)",
+  title:"Spin Doctor",
+  hook:"Every vase, chess pawn and drink bottle is just a flat outline that got dizzy. Today they see it happen.",
+  time:"≈ 20 min", vibe:"Spinny illusions + play-dough lathe",
+  blurb:"Students spin 2D cardboard profiles into ghostly 3D shapes, play guess-the-silhouette, and carve play-dough on a hand lathe — building the exact mental model the Revolve tool needs.",
+  mats:["Card, scissors, pencils & tape (profile spinners)","Play-dough or plasticine","BBQ skewers + plastic knives (the 'lathe')","A water bottle, a vase-ish object, a chess pawn if you have one","Optional: cordless drill for the teacher demo spinner"],
+  phases:[
+    {b:"THE ILLUSION", t:"Teacher demo", time:"4 min", body:`
+      <p>Beforehand: cut a card <b>half-outline of a vase</b> (flat edge on the spine), tape it to a pencil. Now spin the pencil fast between your palms — drill optional for maximum drama.</p>
+      <div class="say"><b>Say this</b>"This is a flat piece of cardboard. Watch." <i>(spin)</i> "What shape do you see?" — A 3D vase, hanging in the air. "I didn't model the vase. I drew half its outline and spun it. That trick has a name in CAD: <b>Revolve</b>."</div>`},
+    {b:"SPINNER FACTORY", t:"They build the illusion", time:"7 min", badge:"warn", body:`
+      <p>Pairs cut their own half-profiles, tape to pencils, spin. Challenge ladder:</p>
+      <ul>
+        <li>Level 1: a sphere (semicircle profile — confirm it works)</li>
+        <li>Level 2: a drink bottle (look at a real one — neck, shoulder, body)</li>
+        <li>Level 3: a chess pawn or a trophy — show off the curves</li>
+      </ul>
+      <p class="tip">Walk around asking "what would happen if you put a notch <i>here</i>?" — they'll discover grooves and rings appear all the way around. That's the Stash Pod's snap-ring, and they just invented it.</p>`},
+    {b:"SILHOUETTE SHOWDOWN", t:"Guessing game", time:"5 min", badge:"cool", body:`
+      <p>Reverse the brain: you draw a half-profile on the board, teams race to name the object it would revolve into. Points per correct call.</p>
+      <ul>
+        <li>Easy: bowl, can, donut (offset circle!)</li>
+        <li>Medium: lightbulb, bottle, party hat</li>
+        <li>Hard: a profile with a hooked lip → "a jar with a snap lid" — exactly where Lab 9 is headed</li>
+      </ul>`},
+    {b:"THE DOUGH LATHE", t:"Carve one", time:"4 min", body:`
+      <p>Ball of dough on a skewer. One partner spins it slowly, the other holds a plastic knife still against it. The knife cuts a perfect groove all the way round — zero skill required, because <b>the spin does the symmetry</b>.</p>
+      <p>That's the entire philosophy of revolved parts: get the profile right, and roundness is free.</p>`},
+    {b:"THE BRIDGE", t:"Cliffhanger", time:"1 min", badge:"win", bridge:`
+      Next lab: the <b>Stash Pod</b> — a snap-lid capsule for your keyring that clips onto the carabiner you already made. You'll draw half its outline and spin it, exactly like today, plus a Circular Pattern grip so it never slips out of your fingers. The cardboard trick becomes a real object. <span class="next">→ Lab 9: The Stash Pod</span>`}
+  ]
+},
+{
+  id:"b9", from:"After Lab 9 (Stash Pod)", to:"Before Lab 10 (Capstone)",
+  title:"The Pitch Tank",
+  hook:"Nine labs of skills are in the bank. Time to find out what THEY want to build — and make them fight for it.",
+  time:"≈ 30 min", vibe:"Shark Tank",
+  blurb:"Teams ideate capstone-worthy products, check them against a Skill Bingo card of everything they've learned, then deliver 60-second pitches for class votes. The winning energy carries into Lab 10.",
+  mats:["A3 sheets + markers","Skill Bingo cards (draw a 3×3 grid: Sketch · Extrude · Fillet/Chamfer · Pattern · Cut · Clearance Fit · Shell/Walls · Flex Feature · Revolve)","Voting tokens (3 sticky dots per student)","A buzzer or your best air-horn impression"],
+  phases:[
+    {b:"THE FLEX", t:"Look how far you've come", time:"4 min", body:`
+      <p>Run the highlight reel out loud, fast: <i>"Week one, some of you couldn't find the Sketch button. Since then: phone stand, caddy, a case protecting a real $130 computer, a lid with a 0.2 mm fit, a hook that holds a school bag, a carabiner with a plastic spring, a clip your family uses, and a capsule you spun out of thin air."</i></p>
+      <div class="say"><b>Say this</b>"Every lab so far, I chose the project. The capstone is different. You choose. But you have to pitch it — and the class decides what's worth building."</div>`},
+    {b:"IDEA STORM", t:"Quantity first", time:"6 min", badge:"warn", body:`
+      <p>Teams of 3. Five minutes, A3 sheet, as many product ideas as possible. Rules:</p>
+      <ul>
+        <li>Must be something a Year 9/10 would actually <b>use or gift</b> — desk, bag, locker, bedroom, sport, gaming.</li>
+        <li>No idea is too dumb in this phase. Dumb ideas are fertiliser.</li>
+        <li>Seed prompts if a team stalls: "what annoys you daily?", "what do you always lose?", "what would you sell at a market stall?"</li>
+      </ul>
+      <span class="timerlink" onclick="openTimer(300,'IDEA STORM')">⏱ 5:00 storm timer</span>`},
+    {b:"SKILL BINGO", t:"The filter", time:"6 min", badge:"cool", body:`
+      <p>Hand out the Skill Bingo card. Teams pick their top 2 ideas and stamp which of the nine skills each would use. The rule of the capstone: <b>a worthy project covers at least 5 squares.</b></p>
+      <ul>
+        <li>A flat keyring = 2 squares. Not capstone-worthy. Add a hinge? A snap lid? Now we're talking.</li>
+        <li>This is where ideas mutate from "a thing" into "a thing with a fit, a flex and a pattern."</li>
+      </ul>
+      <p class="tip">This card quietly doubles as your assessment rubric later. They're scoping their own project to the marking criteria and they think it's a game.</p>`},
+    {b:"60-SECOND PITCHES", t:"The Tank", time:"10 min", badge:"warn", body:`
+      <p>One pitch per team, strict 60 seconds, buzzer is law. Format on the board:</p>
+      <ul>
+        <li><b>The problem</b> — who is annoyed and why</li>
+        <li><b>The product</b> — what it is, in one sentence</li>
+        <li><b>The bingo</b> — which skills it covers</li>
+      </ul>
+      <p>Then every student spends 3 sticky dots on any pitches <i>except their own team's</i>. Dot counts go on the scoreboard.</p>
+      <span class="timerlink" onclick="openTimer(60,'PITCH CLOCK')">⏱ 60-second pitch clock</span>`},
+    {b:"THE BRIDGE", t:"Send-off", time:"3 min", badge:"win", bridge:`
+      Nobody is locked to the winning pitch — teams build their own — but the dots show what the room believes in, and stealing good ideas with credit is called <i>engineering</i>. Next session, the trainer wheels come off: Lab 10 is the Major Project, every tool unlocked, your design, start to finish. <span class="next">→ Lab 10: The Capstone</span>`}
+  ]
+}
+];
+
+/* ---------------- state ---------------- */
+const LS_DONE='bridge_done_v1', LS_TEAMS='bridge_teams_v1';
+let doneSet = new Set(JSON.parse(localStorage.getItem(LS_DONE)||'[]'));
+let teams = JSON.parse(localStorage.getItem(LS_TEAMS)||'null') || [
+  {n:'Team Alpha',p:0},{n:'Team Bravo',p:0},{n:'Team Charlie',p:0},{n:'Team Delta',p:0}
+];
+let cur=-1, revealed=0;
+
+/* ---------------- home grid ---------------- */
+const grid=document.getElementById('grid');
+function buildGrid(){
+  grid.innerHTML='';
+  BRIDGES.forEach((b,i)=>{
+    const c=document.createElement('div');
+    c.className='card'+(doneSet.has(b.id)?' complete':'');
+    c.innerHTML=`<div class="done"></div><div class="num stencil">${i+1}</div>
+      <div class="route">${b.from} → ${b.to.replace('Before ','')}</div>
+      <h3 class="stencil">${b.title}</h3>
+      <p>${b.blurb}</p>
+      <div class="meta"><span class="pill time">${b.time}</span><span class="pill">${b.vibe}</span></div>`;
+    c.addEventListener('click',()=>openBridge(i));
+    grid.appendChild(c);
+  });
+}
+buildGrid();
+
+/* ---------------- activity view ---------------- */
+function openBridge(i){
+  cur=i; revealed=0;
+  const b=BRIDGES[i];
+  document.getElementById('home').style.display='none';
+  document.getElementById('stage').classList.add('on');
+  document.getElementById('deckctl').classList.add('on');
+  document.getElementById('crumb').textContent=`Bridge ${i+1} of ${BRIDGES.length}`;
+  document.getElementById('rRoute').textContent=`${b.from}  ·  ${b.to}`;
+  document.getElementById('rTitle').textContent=b.title;
+  document.getElementById('rHook').textContent=b.hook;
+  document.getElementById('rMats').innerHTML=b.mats.map(m=>`<li>${m}</li>`).join('');
+  updateDoneBtn();
+
+  const wrap=document.getElementById('phasewrap');
+  wrap.innerHTML='';
+  b.phases.forEach((ph)=>{
+    const d=document.createElement('div');
+    d.className='phase';
+    const badge=ph.badge||'';
+    if(ph.bridge){
+      d.innerHTML=`<div class="phead"><span class="pbadge win stencil">${ph.b}</span>
+        <h3 class="stencil">${ph.t}</h3><span class="ptime">${ph.time}</span></div>
+        <div class="bridgecard"><h4>Why this mattered</h4><p>${ph.bridge}</p></div>`;
+    }else{
+      d.innerHTML=`<div class="phead"><span class="pbadge ${badge} stencil">${ph.b}</span>
+        <h3 class="stencil">${ph.t}</h3><span class="ptime">${ph.time}</span></div>
+        <div class="pbody">${ph.body}</div>`;
+    }
+    wrap.appendChild(d);
+  });
+  buildDots();
+  reveal(); // show first phase immediately
+}
+function buildDots(){
+  const dd=document.getElementById('phasedots'); dd.innerHTML='';
+  BRIDGES[cur].phases.forEach(()=>{const s=document.createElement('span');s.className='dot';dd.appendChild(s);});
+}
+function reveal(){
+  const phases=document.querySelectorAll('.phase');
+  if(revealed>=phases.length) return;
+  phases[revealed].classList.add('show');
+  document.querySelectorAll('.dot')[revealed].classList.add('lit');
+  phases[revealed].scrollIntoView({behavior:'smooth',block:'start'});
+  revealed++;
+  const btn=document.getElementById('revealBtn');
+  if(revealed>=phases.length){
+    btn.textContent='ALL REVEALED ✓'; btn.disabled=true;
+    confettiBurst();
+    doneSet.add(BRIDGES[cur].id); persistDone(); updateDoneBtn();
+  }else{
+    btn.textContent='REVEAL ▸'; btn.disabled=false;
+  }
+}
+function goHome(){
+  cur=-1;
+  document.getElementById('stage').classList.remove('on');
+  document.getElementById('deckctl').classList.remove('on');
+  document.getElementById('home').style.display='block';
+  document.getElementById('crumb').textContent='';
+  buildGrid();
+}
+function toggleDone(){
+  const b=BRIDGES[cur];
+  if(doneSet.has(b.id)) doneSet.delete(b.id); else doneSet.add(b.id);
+  persistDone(); updateDoneBtn();
+}
+function updateDoneBtn(){
+  const btn=document.getElementById('markDone');
+  btn.textContent=doneSet.has(BRIDGES[cur].id)?'Run ✓ (tap to clear)':'Mark as run ✓';
+}
+function persistDone(){localStorage.setItem(LS_DONE,JSON.stringify([...doneSet]));}
+
+/* ---------------- timer ---------------- */
+let tSecs=300, tLeft=300, tRun=false, tInt=null;
+function openTimer(secs,label){
+  tSecs=tLeft=secs; tRun=false; clearInterval(tInt);
+  document.getElementById('timerLbl').textContent=label||'Timer';
+  document.getElementById('timerGo').textContent='START';
+  drawTimer();
+  document.getElementById('timerOv').classList.add('on');
+}
+function closeTimer(){tRun=false;clearInterval(tInt);document.getElementById('timerOv').classList.remove('on');}
+function timerToggle(){
+  tRun=!tRun;
+  document.getElementById('timerGo').textContent=tRun?'PAUSE':'START';
+  if(tRun){
+    tInt=setInterval(()=>{
+      tLeft--;
+      if(tLeft<=0){tLeft=0;tRun=false;clearInterval(tInt);buzz();document.getElementById('timerGo').textContent='START';}
+      drawTimer();
+    },1000);
+  }else clearInterval(tInt);
+}
+function timerAdd(s){tLeft=Math.max(0,tLeft+s);drawTimer();}
+function drawTimer(){
+  const m=Math.floor(tLeft/60), s=tLeft%60;
+  const el=document.getElementById('timerBig');
+  el.textContent=`${m}:${String(s).padStart(2,'0')}`;
+  el.classList.toggle('low',tLeft<=30&&tLeft>0);
+}
+function buzz(){
+  try{
+    const ac=new (window.AudioContext||window.webkitAudioContext)();
+    [0,0.35,0.7].forEach(t=>{
+      const o=ac.createOscillator(),g=ac.createGain();
+      o.type='square';o.frequency.value=180;
+      g.gain.setValueAtTime(0.0001,ac.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(0.25,ac.currentTime+t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+t+0.3);
+      o.connect(g);g.connect(ac.destination);
+      o.start(ac.currentTime+t);o.stop(ac.currentTime+t+0.32);
+    });
+  }catch(e){}
+}
+
+/* ---------------- scoreboard ---------------- */
+function openScore(){renderTeams();document.getElementById('scoreOv').classList.add('on');}
+function closeScore(){document.getElementById('scoreOv').classList.remove('on');persistTeams();}
+function renderTeams(){
+  const box=document.getElementById('steams'); box.innerHTML='';
+  teams.forEach((t,i)=>{
+    const r=document.createElement('div'); r.className='steam';
+    r.innerHTML=`<input value="${t.n.replace(/"/g,'&quot;')}" data-i="${i}">
+      <button class="sbtn" data-i="${i}" data-d="-1">−</button>
+      <span class="pts stencil">${t.p}</span>
+      <button class="sbtn" data-i="${i}" data-d="1">+</button>`;
+    box.appendChild(r);
+  });
+  box.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',e=>{
+    teams[+e.target.dataset.i].n=e.target.value; persistTeams();
+  }));
+  box.querySelectorAll('.sbtn').forEach(b=>b.addEventListener('click',e=>{
+    const i=+e.target.dataset.i, d=+e.target.dataset.d;
+    teams[i].p=Math.max(0,teams[i].p+d); persistTeams(); renderTeams();
+  }));
+}
+function addTeam(){teams.push({n:'Team '+String.fromCharCode(65+teams.length),p:0});persistTeams();renderTeams();}
+function resetScores(){teams.forEach(t=>t.p=0);persistTeams();renderTeams();}
+function persistTeams(){localStorage.setItem(LS_TEAMS,JSON.stringify(teams));}
+
+/* ---------------- confetti ---------------- */
+function confettiBurst(){
+  const cols=['#ff6a2b','#ffc83d','#2fd4b5','#4aa8ff','#ff4d5e'];
+  for(let i=0;i<60;i++){
+    const c=document.createElement('div'); c.className='confetti';
+    c.style.left=Math.random()*100+'vw';
+    c.style.background=cols[i%cols.length];
+    c.style.transform=`rotate(${Math.random()*360}deg)`;
+    const dur=2.2+Math.random()*1.5;
+    c.style.transition=`transform ${dur}s linear, top ${dur}s linear, opacity ${dur}s`;
+    document.body.appendChild(c);
+    requestAnimationFrame(()=>{
+      c.style.top=(100+Math.random()*20)+'vh';
+      c.style.transform=`translateX(${(Math.random()-.5)*220}px) rotate(${Math.random()*720}deg)`;
+      c.style.opacity='0';
+    });
+    setTimeout(()=>c.remove(),dur*1000+250);
+  }
+}
+
+/* ---------------- keys ---------------- */
+document.addEventListener('keydown',e=>{
+  const tag=document.activeElement&&document.activeElement.tagName;
+  if(tag==='INPUT')return;
+  if(e.key==='Escape'){
+    if(document.getElementById('timerOv').classList.contains('on'))closeTimer();
+    else if(document.getElementById('scoreOv').classList.contains('on'))closeScore();
+    else if(cur>=0)goHome();
+  }
+  if(cur<0)return;
+  if(e.key===' '||e.key==='ArrowRight'){e.preventDefault();reveal();}
+  if(e.key==='t'||e.key==='T')openTimer(300,'Quick timer');
+  if(e.key==='s'||e.key==='S')openScore();
+});
+</script>
+</body>
+</html>
