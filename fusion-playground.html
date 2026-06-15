@@ -67,6 +67,8 @@ button{font-family:inherit}
 .tool:hover{background:#424242;border-color:#525252}
 .tool.active{background:#173a4a;border-color:var(--blue);color:#fff}
 .tool svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.tool svg.clr,.tchip svg.clr,.dispbtn svg.clr,.abtn svg.clr{stroke:none;fill:none}
+.tool svg.clr [stroke]{stroke-linecap:round;stroke-linejoin:round}
 .tool .lbl{font-size:.68rem;line-height:1.05;text-align:center;color:#c9c9c9}
 .tool.big{width:78px}
 .tool.green{color:#9ccc65}
@@ -323,12 +325,78 @@ body.light .dnote{color:#3a5563;background:#e8f2f8}
 body.light #dlg footer{border-top-color:#dcdee1}
 body.light #dlg footer button{background:#eceef0;border-color:#cdcfd2;color:#2b2b2b}
 body.light #dlg footer button:hover{background:#e1e3e6}
+
+/* ===== refined light theme — tuned to the real Fusion 360 screenshot ===== */
+body.light{background:#cfd1d4}
+body.light #appbar{background:#eaeaec;border-bottom-color:#cfd0d2}
+body.light .abtn{color:#5a5d61}
+body.light .abtn:hover{background:#dadbdd}
+body.light #ribbon{background:#f5f5f6;border-bottom-color:#d2d3d5}
+body.light #tabsrow{background:#ececee;border-bottom:1px solid #d6d7d9}
+body.light #wsbox{background:#f7f7f8;border-color:#c9cacc;color:#262626}
+body.light .rtab{color:#5c5f63;font-weight:600;border-bottom:0}
+body.light .rtab.active{color:#1b1b1b;background:#f5f5f6;border:1px solid #d2d3d5;
+  border-bottom-color:#f5f5f6;border-radius:3px 3px 0 0;padding:6px 12px 7px;margin-bottom:-1px}
+body.light .rtab.ghost{color:#9a9d9f}
+body.light #toolsrow{background:#f5f5f6}
+body.light .tgroup{border-right-color:#dbdcde}
+body.light .tool{color:#3a3d40}
+body.light .tool:hover{background:#e4eef7;border-color:#bcd9ef}
+body.light .tool.active{background:#d4ebf7;border-color:#0696d7;color:#0a5a82}
+body.light .gname{color:#6f7378}
+/* CG account avatar */
+#cgava{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#ff7a59,#e8542e);
+  color:#fff;font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center;
+  margin-left:6px;letter-spacing:.3px;flex:none;cursor:pointer;border:1px solid rgba(0,0,0,.12)}
+.abtn .badge{position:absolute;top:1px;right:1px;min-width:12px;height:12px;padding:0 2px;background:#e8542e;
+  color:#fff;font-size:.56rem;line-height:12px;border-radius:7px;font-weight:700;text-align:center}
+.abtn{position:relative}
+
+/* ===================== RIGHT-CLICK MARKING MENU (Fusion style) ===================== */
+#markmenu{position:fixed;inset:0;z-index:120;display:none}
+#markmenu.open{display:block}
+#mm-wheel{position:absolute;width:150px;height:150px;transform:translate(-50%,-50%);
+  filter:drop-shadow(0 8px 18px rgba(0,0,0,.4))}
+.mmseg{cursor:pointer}
+.mmseg .seg{fill:#3a3d40;stroke:#1f2123;stroke-width:1;transition:fill .08s}
+.mmseg:hover .seg{fill:#0696d7}
+.mmseg .mmico{fill:none;stroke:#d8d8d8;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.mmseg .mmico.fill{fill:#d8d8d8;stroke:none}
+.mmseg:hover .mmico{stroke:#fff}
+.mmseg:hover .mmico.fill{fill:#fff;stroke:none}
+#mm-hub{fill:#262626;stroke:#1f2123;stroke-width:1}
+#mm-list{position:absolute;background:#2f2f2f;border:1px solid #4a4a4a;border-radius:4px;
+  box-shadow:0 12px 30px rgba(0,0,0,.5);padding:4px;min-width:190px;max-width:240px}
+#mm-list button{display:flex;width:100%;gap:10px;align-items:center;background:none;border:0;color:#e3e3e3;
+  padding:6px 11px;font-size:.82rem;border-radius:3px;cursor:pointer;text-align:left;font-family:inherit}
+#mm-list button:hover{background:#0696d7;color:#fff}
+#mm-list button .mk{margin-left:auto;color:#9a9a9a;font-size:.72rem;padding-left:14px}
+#mm-list button:hover .mk{color:#dff3ff}
+#mm-list button svg{width:15px;height:15px;flex:none}
+#mm-list .sep{height:1px;background:#4a4a4a;margin:4px 3px}
+#mm-list .hdr{font-size:.68rem;letter-spacing:.8px;color:#8a8d90;padding:5px 11px 3px;text-transform:uppercase}
+#mm-list button.dis{color:#6e7174;cursor:default}
+#mm-list button.dis:hover{background:none;color:#6e7174}
+body.light .mmseg .seg{fill:#f4f4f5;stroke:#cdced0}
+body.light .mmseg:hover .seg{fill:#0696d7}
+body.light .mmseg .mmico{stroke:#44474a}
+body.light .mmseg .mmico.fill{fill:#44474a}
+body.light .mmseg:hover .mmico{stroke:#fff}
+body.light .mmseg:hover .mmico.fill{fill:#fff}
+body.light #mm-hub{fill:#e9e9ea;stroke:#cdced0}
+body.light #mm-list{background:#fbfbfc;border-color:#cdced0;box-shadow:0 12px 30px rgba(0,0,0,.22)}
+body.light #mm-list button{color:#2b2b2b}
+body.light #mm-list button:hover{background:#0696d7;color:#fff}
+body.light #mm-list .sep{background:#e3e3e5}
+body.light #mm-list .hdr{color:#85888c}
+body.light #mm-list button.dis{color:#a9abad}
 </style>
 </head>
 <body>
 
 <!-- ===================== APPLICATION BAR ===================== -->
 <div id="appbar">
+  <button class="abtn" id="b-home" title="Home"><svg viewBox="0 0 24 24"><path d="M4 11l8-6 8 6"/><path d="M6 10v9h5v-5h2v5h5v-9"/></svg></button>
   <button class="abtn" id="b-grid" title="Data Panel">
     <svg viewBox="0 0 24 24"><rect x="4" y="4" width="5" height="5"/><rect x="10.5" y="4" width="5" height="5"/><rect x="17" y="4" width="3" height="5"/><rect x="4" y="10.5" width="5" height="5"/><rect x="10.5" y="10.5" width="5" height="5"/><rect x="17" y="10.5" width="3" height="5"/><rect x="4" y="17" width="5" height="3"/><rect x="10.5" y="17" width="5" height="3"/><rect x="17" y="17" width="3" height="3"/></svg>
   </button>
@@ -359,8 +427,10 @@ body.light #dlg footer button:hover{background:#e1e3e6}
       <svg id="ic-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
       <svg id="ic-sun" viewBox="0 0 24 24" style="display:none"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M19.4 4.6l-1.8 1.8M6.4 17.6l-1.8 1.8"/></svg>
     </button>
+    <button class="abtn" id="b-clock" title="Activity"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.2v5l3.2 2"/></svg><span class="badge">1</span></button>
     <button class="abtn" id="b-bell" title="Notifications"><svg viewBox="0 0 24 24"><path d="M12 4a5 5 0 0 0-5 5v3l-1.5 3h13L17 12V9a5 5 0 0 0-5-5z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg></button>
     <button class="abtn" id="b-help" title="Help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.2a2.6 2.6 0 0 1 5 .9c0 1.8-2.4 2.2-2.4 3.9"/><circle cx="12" cy="17.4" r="0.4" stroke-width="2.4"/></svg></button>
+    <div id="cgava" title="Account">CG</div>
   </div>
 
   <div id="filemenu">
@@ -395,23 +465,23 @@ body.light #dlg footer button:hover{background:#e1e3e6}
     <div class="tgroup" id="g-create">
       <div class="row">
         <button class="tool" id="t-sketch">
-          <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M8 16l6.5-6.5 2 2L10 18H8z"/><path d="M14.5 9.5l1.5-1.5 2 2L16.5 11.5"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><rect x="3.5" y="3.5" width="17" height="17" rx="1.5" fill="#dceaf6" stroke="#5b9bd5" stroke-width="1.3"/><path d="M7.4 16.7l6.7-6.7 2 2-6.7 6.7-2.4.4z" fill="#f2c14e" stroke="#c2922b" stroke-width="1"/><path d="M14.1 10l1.6-1.6 2 2-1.6 1.6z" fill="#9aa0a6" stroke="#62676c" stroke-width="1"/></svg>
           <span class="lbl">Create<br>Sketch</span><span class="tip">Create Sketch — pick a plane or a flat top face</span>
         </button>
         <button class="tool" id="t-extrude">
-          <svg viewBox="0 0 24 24"><rect x="5" y="13" width="9" height="6"/><path d="M5 13l4-4h9l-4 4M14 13l4-4v6l-4 4"/><path d="M12 9V4m0 0l-2 2m2-2l2 2"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><path d="M4 17.5l4-2.2 6 0 4 2.2-4 2.2H8z" fill="#9cc0e8" stroke="#3a78c2" stroke-width="1"/><path d="M8 15.3V9.5h6v5.8" fill="#cfe1f5" stroke="#3a78c2" stroke-width="1"/><path d="M14 15.3l4-2.2V7.3l-4 2.2" fill="#7aa7df" stroke="#2f6cb8" stroke-width="1"/><path d="M11 8V3.2M11 3.2L9 5.2M11 3.2l2 2" fill="none" stroke="#e8923a" stroke-width="1.6"/></svg>
           <span class="lbl">Extrude</span><span class="tip">Extrude (E) — pull a profile into 3D, or cut with a negative distance</span>
         </button>
         <button class="tool" id="t-revolve">
-          <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="2.5"/><path d="M4 6v12a8 2.5 0 0 0 16 0V6"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><path d="M5 6.5h14" fill="none" stroke="#888d92" stroke-width="1.1" stroke-dasharray="2.5 2"/><ellipse cx="12" cy="6.5" rx="7.5" ry="2.4" fill="#cfe1f5" stroke="#3a78c2" stroke-width="1"/><path d="M4.5 6.5v9.5c0 1.3 3.4 2.4 7.5 2.4s7.5-1.1 7.5-2.4V6.5" fill="#9cc0e8" stroke="#3a78c2" stroke-width="1"/><path d="M4.5 16c0 1.3 3.4 2.4 7.5 2.4s7.5-1.1 7.5-2.4" fill="none" stroke="#3a78c2" stroke-width="1"/></svg>
           <span class="lbl">Revolve</span><span class="tip">Revolve — spin a profile around an axis (Lab 9)</span>
         </button>
         <button class="tool" id="t-rpattern">
-          <svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6" stroke-dasharray="2.4 2"/><rect x="4" y="14" width="6" height="6" stroke-dasharray="2.4 2"/><rect x="14" y="14" width="6" height="6" stroke-dasharray="2.4 2"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><rect x="4" y="4" width="6" height="6" rx="1" fill="#7aa7df" stroke="#2f6cb8" stroke-width="1"/><rect x="14" y="4" width="6" height="6" rx="1" fill="#cfe1f5" stroke="#5b9bd5" stroke-width="1"/><rect x="4" y="14" width="6" height="6" rx="1" fill="#cfe1f5" stroke="#5b9bd5" stroke-width="1"/><rect x="14" y="14" width="6" height="6" rx="1" fill="#cfe1f5" stroke="#5b9bd5" stroke-width="1"/></svg>
           <span class="lbl">Rect<br>Pattern</span><span class="tip">Rectangular Pattern (Lab 4) — design once, let maths repeat it</span>
         </button>
         <button class="tool" id="t-cpattern">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="2.4 2.4"/><circle cx="12" cy="4.5" r="2.2"/><circle cx="18.5" cy="15.7" r="2.2" stroke-dasharray="2 1.6"/><circle cx="5.5" cy="15.7" r="2.2" stroke-dasharray="2 1.6"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><circle cx="12" cy="12" r="8.5" fill="none" stroke="#888d92" stroke-width="1" stroke-dasharray="2.4 2.4"/><circle cx="12" cy="4.2" r="2.3" fill="#7aa7df" stroke="#2f6cb8" stroke-width="1"/><circle cx="18.7" cy="15.8" r="2.3" fill="#cfe1f5" stroke="#5b9bd5" stroke-width="1"/><circle cx="5.3" cy="15.8" r="2.3" fill="#cfe1f5" stroke="#5b9bd5" stroke-width="1"/></svg>
           <span class="lbl">Circular<br>Pattern</span><span class="tip">Circular Pattern (Lab 9) — clone a body around an axis</span>
         </button>
       </div>
@@ -421,19 +491,19 @@ body.light #dlg footer button:hover{background:#e1e3e6}
     <div class="tgroup" id="g-modify">
       <div class="row">
         <button class="tool" id="t-fillet">
-          <svg viewBox="0 0 24 24"><path d="M5 19V11a6 6 0 0 1 6-6h8"/><path d="M5 19h14"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><path d="M5 19V11a6 6 0 0 1 6-6h8v14z" fill="#cfe1f5" stroke="#3a78c2" stroke-width="1.1"/><path d="M5 11a6 6 0 0 1 6-6" fill="none" stroke="#e8923a" stroke-width="1.6"/></svg>
           <span class="lbl">Fillet</span><span class="tip">Fillet — round an edge (printers & fingers both love it)</span>
         </button>
         <button class="tool" id="t-chamfer">
-          <svg viewBox="0 0 24 24"><path d="M5 19V10l5-5h9"/><path d="M5 19h14"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><path d="M5 19V10l5-5h9v14z" fill="#cfe1f5" stroke="#3a78c2" stroke-width="1.1"/><path d="M5 10l5-5" fill="none" stroke="#e8923a" stroke-width="1.6"/></svg>
           <span class="lbl">Chamfer</span><span class="tip">Chamfer (Lab 5) — 45° cut edge, prints cleanly with no supports</span>
         </button>
         <button class="tool" id="t-move">
-          <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M12 3l-2.4 2.4M12 3l2.4 2.4M12 21l-2.4-2.4M12 21l2.4-2.4M3 12l2.4-2.4M3 12l2.4 2.4M21 12l-2.4-2.4M21 12l-2.4 2.4"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><circle cx="12" cy="12" r="1.7" fill="#cfd4d8" stroke="#7a7e82" stroke-width="1"/><path d="M12 11V4M12 4l-1.8 2M12 4l1.8 2" fill="none" stroke="#4a9e4a" stroke-width="1.7"/><path d="M13 12h7M20 12l-2-1.8M20 12l-2 1.8" fill="none" stroke="#d64545" stroke-width="1.7"/><path d="M11.2 12.8L5.6 18.4M5.6 18.4l2.7-.3M5.6 18.4l.3-2.7" fill="none" stroke="#3a78c2" stroke-width="1.7"/></svg>
           <span class="lbl">Move</span><span class="tip">Move (M) — slide a body in X / Y / Z</span>
         </button>
         <button class="tool" id="t-appearance">
-          <svg viewBox="0 0 24 24"><path d="M12 4c4.5 0 8 3 8 7 0 2.4-1.7 3.5-3.4 3.5H15c-1.2 0-2 .8-2 1.9 0 .9.6 1.2.6 2 0 .9-.7 1.6-1.7 1.6-4.4 0-8-3.6-8-8s3.6-8 8.1-8z"/><circle cx="8" cy="11" r="1.2"/><circle cx="12" cy="8.4" r="1.2"/><circle cx="16" cy="11" r="1.2"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><defs><linearGradient id="apgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7ec0ff"/><stop offset=".55" stop-color="#3a78c2"/><stop offset="1" stop-color="#234e86"/></linearGradient></defs><circle cx="12" cy="12" r="8.5" fill="url(#apgrad)" stroke="#234e86" stroke-width="1"/><ellipse cx="9" cy="8.6" rx="2.6" ry="1.6" fill="#ffffff" opacity=".55" transform="rotate(-28 9 8.6)"/></svg>
           <span class="lbl">Appearance</span><span class="tip">Appearance (A) — choose the plastic colour</span>
         </button>
       </div>
@@ -443,7 +513,7 @@ body.light #dlg footer button:hover{background:#e1e3e6}
     <div class="tgroup" id="g-construct">
       <div class="row">
         <button class="tool" id="t-inspect">
-          <svg viewBox="0 0 24 24"><path d="M4 18L18 4"/><path d="M4 18l3-1m-3 1l1-3M18 4l-3 1m3-1l-1 3"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><rect x="2.5" y="8.5" width="19" height="7" rx="1" transform="rotate(-45 12 12)" fill="#f2c14e" stroke="#c2922b" stroke-width="1"/><g stroke="#7a5a16" stroke-width="1"><path d="M8.4 7.8l1.4 1.4"/><path d="M11.2 10.6l.9.9"/><path d="M11 5.2l1.4 1.4"/><path d="M13.8 8l.9.9"/></g></svg>
           <span class="lbl">Measure</span><span class="tip">Measure — click two points on the grid (sketch mode)</span>
         </button>
       </div>
@@ -453,15 +523,15 @@ body.light #dlg footer button:hover{background:#e1e3e6}
     <div class="tgroup" id="g-ghost">
       <div class="row">
         <button class="tool ghostt" title="Not needed for our labs">
-          <svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4-8 4z"/><path d="M4 8v8l8 4 8-4V8"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><g transform="skewY(-13)"><rect x="5" y="7" width="4.7" height="11" fill="#5aa84b"/><rect x="9.7" y="7" width="4.6" height="11" fill="#f5f5f5"/><rect x="14.3" y="7" width="4.7" height="11" fill="#e8923a"/><rect x="5" y="7" width="14" height="11" fill="none" stroke="#6f7378" stroke-width="1"/></g></svg>
           <span class="lbl">Offset<br>Plane</span>
         </button>
         <button class="tool ghostt" title="Not needed for our labs">
-          <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M4 16l4-4 3 3 4-5 5 6"/><circle cx="9" cy="9.5" r="1.4"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><rect x="3.5" y="5" width="17" height="14" rx="1.3" fill="#dceaf6" stroke="#5b9bd5" stroke-width="1.1"/><circle cx="8" cy="9.4" r="1.7" fill="#f4c430"/><path d="M4 18.4l4.2-5.4 3 3 3.6-4.6L20 18.4z" fill="#6cae3e" stroke="#3f7d28" stroke-width="0.8"/></svg>
           <span class="lbl">Insert</span>
         </button>
         <button class="tool ghostt" title="Not needed for our labs">
-          <svg viewBox="0 0 24 24"><path d="M5 4l6 16 2.4-6.5L20 11z"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><rect x="3.5" y="3.5" width="12" height="12" rx="1" fill="none" stroke="#7a7e82" stroke-width="1" stroke-dasharray="2.2 2"/><path d="M10 9.5l9.5 4-4 1.3-1.3 4z" fill="#3a3d40" stroke="#1b1b1b" stroke-width="0.7"/></svg>
           <span class="lbl">Select</span>
         </button>
       </div>
@@ -472,15 +542,15 @@ body.light #dlg footer button:hover{background:#e1e3e6}
     <div class="tgroup hidden" id="g-sktools">
       <div class="row">
         <button class="tool" id="t-line">
-          <svg viewBox="0 0 24 24"><circle cx="5.5" cy="18.5" r="1.6"/><circle cx="18.5" cy="5.5" r="1.6"/><path d="M7 17L17 7"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><path d="M6.7 17.3L17.3 6.7" fill="none" stroke="#3a78c2" stroke-width="1.6"/><circle cx="5.5" cy="18.5" r="1.7" fill="#fff" stroke="#3a78c2" stroke-width="1.3"/><circle cx="18.5" cy="5.5" r="1.7" fill="#fff" stroke="#3a78c2" stroke-width="1.3"/></svg>
           <span class="lbl">Line</span><span class="tip">Line (L) — click points; click the first point again to close the shape</span>
         </button>
         <button class="tool" id="t-rect">
-          <svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12"/><circle cx="4" cy="6" r="1.4"/><circle cx="20" cy="18" r="1.4"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><rect x="4" y="6" width="16" height="12" fill="none" stroke="#3a78c2" stroke-width="1.5"/><circle cx="4" cy="6" r="1.6" fill="#fff" stroke="#3a78c2" stroke-width="1.2"/><circle cx="20" cy="18" r="1.6" fill="#fff" stroke="#3a78c2" stroke-width="1.2"/></svg>
           <span class="lbl">2-Point<br>Rectangle</span><span class="tip">Rectangle (R) — click two corners, or type the size</span>
         </button>
         <button class="tool" id="t-circle">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.1"/></svg>
+          <svg viewBox="0 0 24 24" class="clr"><circle cx="12" cy="12" r="8" fill="none" stroke="#3a78c2" stroke-width="1.5"/><circle cx="12" cy="12" r="1.3" fill="#3a78c2"/></svg>
           <span class="lbl">Center Dia.<br>Circle</span><span class="tip">Circle (C) — click the centre, then type or click the diameter</span>
         </button>
       </div>
@@ -610,6 +680,9 @@ body.light #dlg footer button:hover{background:#e1e3e6}
 
   <div id="dimhud"></div>
 </div>
+
+<!-- ===================== RIGHT-CLICK MARKING MENU ===================== -->
+<div id="markmenu"><svg id="mm-wheel" viewBox="0 0 150 150"></svg><div id="mm-list"></div></div>
 
 <!-- ===================== WELCOME ===================== -->
 <div id="welcome">
@@ -1976,16 +2049,227 @@ canvas.addEventListener('pointermove',e=>{
 });
 canvas.addEventListener('pointerup',e=>{
   canvas.classList.remove('orbiting');
-  const wasClick=drag&&!drag.moved&&drag.btn===0;
+  const wasLeftClick=drag&&!drag.moved&&drag.btn===0;
+  const wasRightClick=drag&&!drag.moved&&drag.btn===2;
   drag=null;
-  if(!wasClick)return;
+  if(wasRightClick){ openCanvasMarkingMenu(e); return; }
+  if(!wasLeftClick)return;
   setNDC(e);
   handleClick(e);
 });
 canvas.addEventListener('wheel',e=>{
   e.preventDefault();
   cam.dist=clamp(cam.dist*(e.deltaY>0?1.1:0.9),40,2200);
+  closeMarkingMenu();
 },{passive:false});
+
+/* ============================================================ MARKING MENU
+   Real Fusion shows a radial "marking menu" wheel + a linear context list on
+   right-click. We reproduce both, with context-aware commands. */
+const MMICON={
+  trash:'<path d="M5 7h14M9 7V5h6v2M7 7l1 13h8l1-13"/>',
+  eye:'<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.4"/>',
+  eyeoff:'<path d="M4 4l16 16M9.5 9.6A2.5 2.5 0 0 0 12 14.5a2.5 2.5 0 0 0 2.4-1.8M6.6 6.8C3.9 8.4 2.5 12 2.5 12s3.5 6 9.5 6c1.6 0 3-.4 4.2-1M9 6.2A8.6 8.6 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.2 2.6"/>',
+  move:'<path d="M12 3v18M3 12h18M12 3l-2 2m2-2l2 2M12 21l-2-2m2 2l2-2M3 12l2-2m-2 2l2 2M21 12l-2-2m2 2l-2 2"/>',
+  paint:'<circle cx="12" cy="12" r="7"/><circle cx="9.3" cy="9.3" r="1.4"/>',
+  fillet:'<path d="M5 19V11a6 6 0 0 1 6-6h8"/><path d="M5 19h14"/>',
+  chamfer:'<path d="M5 19V10l5-5h9"/><path d="M5 19h14"/>',
+  isolate:'<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
+  fit:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="9" y="9" width="6" height="6"/>',
+  home:'<path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9"/>',
+  front:'<rect x="5" y="5" width="14" height="14"/>',
+  top:'<path d="M4 8l8-4 8 4-8 4z"/>',
+  right:'<path d="M7 4.5l9 3.5v11L7 15.5z"/>',
+  grid:'<path d="M4 8h16M4 12h16M4 16h16M8 4v16M12 4v16M16 4v16"/>',
+  orbit:'<circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="9" ry="3.4"/>',
+  pan:'<path d="M9 11V6a1.5 1.5 0 0 1 3 0v4m0-1a1.5 1.5 0 0 1 3 0v2m0-1a1.5 1.5 0 0 1 3 0v3.5a5 5 0 0 1-5 5h-1.2l-3.8-3.8"/>',
+  pencil:'<path d="M7 17l8.5-8.5 2 2L9 19H7z"/><path d="M14.5 9.5l1.8-1.8 2 2L16.5 11.5"/>',
+  caret:'<path d="M9 6l6 6-6 6"/>'
+};
+const mmEl=$('markmenu'), mmWheel=$('mm-wheel'), mmList=$('mm-list');
+function mmPolar(r,deg){const a=deg*Math.PI/180;return [75+r*Math.sin(a), 75-r*Math.cos(a)];}
+function mmSegPath(c){
+  const Ro=70,Ri=28,h=22.5, a0=c-h,a1=c+h;
+  const [ix0,iy0]=mmPolar(Ri,a0),[ox0,oy0]=mmPolar(Ro,a0),
+        [ox1,oy1]=mmPolar(Ro,a1),[ix1,iy1]=mmPolar(Ri,a1);
+  const f=n=>n.toFixed(2);
+  return `M${f(ix0)} ${f(iy0)} L${f(ox0)} ${f(oy0)} A${Ro} ${Ro} 0 0 1 ${f(ox1)} ${f(oy1)} `+
+         `L${f(ix1)} ${f(iy1)} A${Ri} ${Ri} 0 0 0 ${f(ix0)} ${f(iy0)} Z`;
+}
+function closeMarkingMenu(){ mmEl.classList.remove('open'); }
+function runMM(fn){ closeMarkingMenu(); if(fn)fn(); }
+/* wheel = array of 8 (N,NE,E,SE,S,SW,W,NW) of {ico,fn} or null; list = items */
+function showMarkingMenu(x,y,wheel,list){
+  // wheel
+  mmWheel.innerHTML='';
+  const hub=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  hub.setAttribute('id','mm-hub'); hub.setAttribute('cx','75'); hub.setAttribute('cy','75'); hub.setAttribute('r','27');
+  const dirs=[0,45,90,135,180,225,270,315], rm=49;
+  for(let i=0;i<8;i++){
+    const item=wheel[i];
+    const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('class','mmseg');
+    const seg=document.createElementNS('http://www.w3.org/2000/svg','path');
+    seg.setAttribute('class','seg'); seg.setAttribute('d',mmSegPath(dirs[i]));
+    g.appendChild(seg);
+    if(item){
+      const [px,py]=mmPolar(rm,dirs[i]);
+      const ig=document.createElementNS('http://www.w3.org/2000/svg','g');
+      ig.setAttribute('class','mmico');
+      ig.setAttribute('transform',`translate(${px.toFixed(1)} ${py.toFixed(1)}) scale(0.8) translate(-12 -12)`);
+      ig.innerHTML=MMICON[item.ico]||'';
+      g.appendChild(ig);
+      g.style.cursor='pointer';
+      g.addEventListener('click',ev=>{ev.stopPropagation();runMM(item.fn);});
+    }else{ g.style.opacity='.55'; }
+    mmWheel.appendChild(g);
+  }
+  mmWheel.appendChild(hub);
+  // linear list
+  mmList.innerHTML='';
+  list.forEach(it=>{
+    if(it.sep){const d=document.createElement('div');d.className='sep';mmList.appendChild(d);return;}
+    if(it.hdr!==undefined){const d=document.createElement('div');d.className='hdr';d.textContent=it.hdr;mmList.appendChild(d);return;}
+    const b=document.createElement('button');
+    if(it.disabled)b.className='dis';
+    b.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${MMICON[it.ico]||''}</svg><span>${it.label}</span>${it.key?`<span class="mk">${it.key}</span>`:''}`;
+    if(!it.disabled)b.addEventListener('click',ev=>{ev.stopPropagation();runMM(it.fn);});
+    mmList.appendChild(b);
+  });
+  // position
+  mmEl.classList.add('open');
+  mmWheel.style.left=x+'px'; mmWheel.style.top=y+'px';
+  const lw=mmList.offsetWidth||190, lh=mmList.offsetHeight||100;
+  let lx=x+46, ly=y+24;
+  if(lx+lw>innerWidth-8)lx=x-46-lw;
+  if(ly+lh>innerHeight-8)ly=innerHeight-8-lh;
+  if(ly<8)ly=8;
+  mmList.style.left=lx+'px'; mmList.style.top=ly+'px';
+}
+/* ---- context builders ---- */
+function isolateBody(body){
+  bodies.forEach(x=>{x.visible=(x===body);x.mesh.visible=x.visible;});
+  selectBody(body); refreshBrowser(); markDirty();
+  toast('Isolated '+body.name+' — right-click empty space → Show All Bodies to restore.');
+}
+function anyHidden(){ return bodies.some(b=>!b.visible); }
+function showAllBodies(){ bodies.forEach(b=>{b.visible=true;b.mesh.visible=true;}); refreshBrowser(); toast('All bodies shown.'); }
+function bodyMM(body,x,y){
+  selectBody(body);
+  const tgl=()=>{body.visible=!body.visible;body.mesh.visible=body.visible;refreshBrowser();markDirty();};
+  const wheel=[
+    {ico:body.visible?'eye':'eyeoff',fn:tgl},                         // N
+    {ico:'isolate',fn:()=>isolateBody(body)},                         // NE
+    {ico:'move',fn:()=>{selectBody(body);startMove();}},              // E
+    {ico:'paint',fn:()=>{selectBody(body);startAppearance();}},       // SE
+    {ico:'trash',fn:()=>{pushUndo();removeBody(body);toast(body.name+' deleted.');}}, // S
+    {ico:'chamfer',fn:()=>{selectBody(body);startFillet('chamfer');}},// SW
+    {ico:'fillet',fn:()=>{selectBody(body);startFillet('fillet');}},  // W
+    {ico:'fit',fn:fitView}                                            // NW
+  ];
+  const list=[
+    {hdr:body.name},
+    {ico:'move',label:'Move / Copy',key:'M',fn:()=>{selectBody(body);startMove();}},
+    {ico:'paint',label:'Appearance…',key:'A',fn:()=>{selectBody(body);startAppearance();}},
+    {ico:'fillet',label:'Fillet…',fn:()=>{selectBody(body);startFillet('fillet');}},
+    {ico:'chamfer',label:'Chamfer…',fn:()=>{selectBody(body);startFillet('chamfer');}},
+    {sep:1},
+    {ico:body.visible?'eyeoff':'eye',label:body.visible?'Hide':'Show',fn:tgl},
+    {ico:'isolate',label:'Isolate',fn:()=>isolateBody(body)},
+    {sep:1},
+    {ico:'trash',label:'Delete',key:'Del',fn:()=>{pushUndo();removeBody(body);toast(body.name+' deleted.');}},
+    {sep:1},
+    {ico:'fit',label:'Fit',key:'F',fn:fitView}
+  ];
+  showMarkingMenu(x,y,wheel,list);
+}
+function viewMM(x,y){
+  const wheel=[
+    {ico:'fit',fn:fitView},                                  // N
+    {ico:'home',fn:()=>gotoView('home')},                    // NE
+    {ico:'front',fn:()=>gotoView('front')},                  // E
+    {ico:'top',fn:()=>gotoView('top')},                      // SE
+    {ico:'grid',fn:()=>{gridGroup.visible=!gridGroup.visible;}}, // S
+    {ico:'right',fn:()=>gotoView('right')},                  // SW
+    {ico:'pan',fn:()=>$('n-pan').click()},                   // W
+    {ico:'orbit',fn:()=>$('n-orbit').click()}                // NW
+  ];
+  const list=[
+    {hdr:'View'},
+    {ico:'fit',label:'Fit',key:'F',fn:fitView},
+    {ico:'home',label:'Home',fn:()=>gotoView('home')},
+    {sep:1},
+    {ico:'front',label:'Front',fn:()=>gotoView('front')},
+    {ico:'top',label:'Top',fn:()=>gotoView('top')},
+    {ico:'right',label:'Right',fn:()=>gotoView('right')},
+    {sep:1},
+    {ico:'grid',label:'Toggle Grid',fn:()=>{gridGroup.visible=!gridGroup.visible;}}
+  ];
+  if(anyHidden())list.push({sep:1},{ico:'eye',label:'Show All Bodies',fn:showAllBodies});
+  showMarkingMenu(x,y,wheel,list);
+}
+function sketchMM(sk,x,y){
+  const tgl=()=>{sk.visible=!sk.visible;sk.group.visible=sk.visible;refreshBrowser();};
+  const wheel=[
+    {ico:sk.visible?'eye':'eyeoff',fn:tgl},
+    null,
+    {ico:'pencil',fn:()=>toast('To add geometry, start a new sketch on a plane or top face.')},
+    null,
+    {ico:'fit',fn:fitView},
+    null,null,null
+  ];
+  const list=[
+    {hdr:sk.name+(sk.consumed?' (used)':'')},
+    {ico:'pencil',label:'Edit Sketch',fn:()=>toast('To add geometry, start a new sketch on a plane or top face.')},
+    {ico:sk.visible?'eyeoff':'eye',label:sk.visible?'Hide':'Show',fn:tgl},
+    {sep:1},
+    {ico:'fit',label:'Fit',key:'F',fn:fitView}
+  ];
+  showMarkingMenu(x,y,wheel,list);
+}
+function genericMM(rowEl,x,y){
+  const node=rowEl.closest('.bnode'); const kids=node&&node.querySelector('.bkids');
+  const wheel=[null,null,{ico:'fit',fn:fitView},null,null,null,null,null];
+  const list=[{hdr:rowEl.querySelector('.nm')?rowEl.querySelector('.nm').textContent:'Item'}];
+  if(kids){
+    const closed=kids.classList.contains('closed');
+    list.push({ico:'caret',label:closed?'Expand':'Collapse',fn:()=>{
+      kids.classList.toggle('closed');
+      const tw=rowEl.querySelector('.tw'); if(tw)tw.textContent=kids.classList.contains('closed')?'▸':'▾';
+    }});
+  }
+  list.push({sep:1},{ico:'fit',label:'Fit',key:'F',fn:fitView});
+  showMarkingMenu(x,y,wheel,list);
+}
+/* ---- canvas right-click → pick body or view menu ---- */
+function openCanvasMarkingMenu(e){
+  if(mode===MODE.MODEL){
+    setNDC(e);
+    const hit=raycastList(bodies.filter(b=>b.visible).map(b=>b.mesh));
+    if(hit&&hit.object.userData.body){ bodyMM(hit.object.userData.body,e.clientX,e.clientY); return; }
+  }
+  viewMM(e.clientX,e.clientY);
+}
+/* ---- browser rows right-click ---- */
+$('btree').addEventListener('contextmenu',e=>{
+  const row=e.target.closest('.brow'); if(!row)return;
+  e.preventDefault();
+  // body row?
+  const bk=$('bod-kids'); const idxB=bk?[...bk.children].indexOf(row):-1;
+  if(idxB>=0&&bodies[idxB]){ bodyMM(bodies[idxB],e.clientX,e.clientY); return; }
+  const sk=$('sk-kids'); const idxS=sk?[...sk.children].indexOf(row):-1;
+  if(idxS>=0&&sketches[idxS]){ sketchMM(sketches[idxS],e.clientX,e.clientY); return; }
+  genericMM(row,e.clientX,e.clientY);
+});
+/* ---- dismissal ---- */
+mmEl.addEventListener('click',closeMarkingMenu);
+mmEl.addEventListener('contextmenu',e=>{e.preventDefault();closeMarkingMenu();});
+addEventListener('keydown',e=>{ if(e.key==='Escape')closeMarkingMenu(); });
+['pointerdown','blur'].forEach(ev=>addEventListener(ev,e=>{
+  if(ev==='pointerdown'&&mmEl.contains(e.target))return;
+  if(mmEl.classList.contains('open'))closeMarkingMenu();
+},true));
+
 
 function handleClick(e){
   if(mode===MODE.PICKPLANE){
@@ -2231,12 +2515,15 @@ function toggleTheme(){
   toast(next==='light'?'Light theme on.':'Dark theme on.');
 }
 (function initTheme(){
-  let saved='dark';
-  try{saved=localStorage.getItem('fp-theme')||'dark';}catch(e){}
+  let saved='light';
+  try{saved=localStorage.getItem('fp-theme')||'light';}catch(e){}
   applyTheme(saved);
 })();
 $('b-theme').addEventListener('click',toggleTheme);
 /* decorative appbar / dock controls */
+$('b-home').addEventListener('click',()=>{gotoView('home');toast('Home view — in real Fusion this returns to the dashboard.');});
+$('b-clock').addEventListener('click',()=>toast('Recent activity lives in real Fusion — your build history is on the timeline below.'));
+$('cgava').addEventListener('click',()=>toast('Signed in as Clarence Goh · Digital Vector (demo account).'));
 $('b-add').addEventListener('click',()=>toast('In real Fusion this creates a new component — here, just sketch and extrude to add bodies.'));
 $('b-bell').addEventListener('click',()=>toast('No new notifications.'));
 $('b-help').addEventListener('click',()=>$('welcome').classList.remove('hidden'));

@@ -376,6 +376,8 @@ A caddy designed at 20% error fits nothing.</div>
       </ul>
       <p>Rules: arrange them on grid paper into one rectangle (the caddy footprint), no overlaps, rotation allowed, and every compartment needs a <b>1 cm wall gap</b> between it and its neighbours and the outside edge. Smallest footprint area wins. Show the working: footprint = width × depth.</p>
       <p class="tip">This is genuine 2D bin packing — NP-hard, meaning no known formula beats clever trial. Tell them that. Academic kids love hearing a problem is officially hard.</p>
+      <p>The model below is the same six compartments, made <b>draggable</b>: students arrange them, press <b>R</b> to rotate the selected piece, and it audits every 1 cm gap live while reporting the footprint area and efficiency η as they move. <b>⚡ Computer's try</b> runs a greedy machine attempt (lands around η ≈ 44%) — set the room the challenge of beating the computer by hand.</p>
+      <p class="tip">Cross-curricular hooks worth naming out loud: this is <b>area &amp; optimisation (Maths)</b>; the identical problem couriers solve loading <b>shipping containers (Economics &amp; logistics)</b>; how an operating system fits programs into <b>RAM (Computing)</b>; and how a laser cutter nests parts to waste the least <b>sheet material (Design &amp; Tech)</b>. One puzzle, four subjects.</p>
       <span class="timerlink" onclick="openTimer(600,'PACKING WINDOW')">⏱ 10:00 packing window</span>`},
     {b:"THE AUDIT", t:"Verify the winner", time:"5 min", badge:"cool", body:`
       <p>Teams swap layouts and audit each other: every wall gap really 1 cm? Any overlaps? Compute the rival's efficiency:</p>
@@ -900,7 +902,7 @@ function attachViz(b){
     const ph=phases[def.phase]; if(!ph) return;
     const body=ph.querySelector('.pbody')||ph;
     const panel=document.createElement('div'); panel.className='vizpanel';
-    panel.innerHTML=`<div class="vizhead"><span>◉ LIVE MODEL — drag to rotate</span><span>${def.title}</span></div>
+    panel.innerHTML=`<div class="vizhead"><span>◉ LIVE MODEL — ${def.hint||'drag to rotate'}</span><span>${def.title}</span></div>
       <div class="vizstage"></div><div class="vizctl"></div><div class="vizread"></div>`;
     body.appendChild(panel);
     pendingVizzes.push({def,phase:def.phase,panel,started:false});
@@ -939,22 +941,33 @@ function startViz(def,panel){
   const dl=new THREE.DirectionalLight(0xffffff,0.85); dl.position.set(140,220,180); scene.add(dl);
   const dl2=new THREE.DirectionalLight(0x99c4ff,0.25); dl2.position.set(-160,80,-120); scene.add(dl2);
 
-  // drag-to-rotate — horizontal drags rotate, vertical touch swipes still scroll the page
+  // Pointer handling. By default a drag rotates the whole model. A build can
+  // "claim" a gesture (e.g. to drag a single tile) by returning true from
+  // ctx.onDown(e); it then receives ctx.onMove(e)/ctx.onUp(e) and rotation is
+  // suppressed for that gesture. ctx.onHover(e) fires on non-dragging moves.
+  // Leaving these hooks unset preserves the original drag-to-rotate behaviour.
   const cv=renderer.domElement;
   cv.style.cursor='grab';
   cv.style.touchAction='pan-y';
-  let dragging=false,px=0,py=0;
-  cv.addEventListener('pointerdown',e=>{dragging=true;px=e.clientX;py=e.clientY;cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing';});
+  const ctx={scene,camera,renderer,root,panel,canvas:cv,ctl:panel.querySelector('.vizctl'),read:panel.querySelector('.vizread')};
+  let dragging=false,rotating=false,px=0,py=0;
+  cv.addEventListener('pointerdown',e=>{
+    px=e.clientX;py=e.clientY;
+    try{cv.setPointerCapture(e.pointerId);}catch(_){}
+    if(ctx.onDown && ctx.onDown(e)){ dragging=true; rotating=false; cv.style.cursor='grabbing'; return; }
+    dragging=true; rotating=true; cv.style.cursor='grabbing';
+  });
   cv.addEventListener('pointermove',e=>{
-    if(!dragging)return;
-    root.rotation.y+=(e.clientX-px)*0.005;
-    root.rotation.x=Math.max(-0.7,Math.min(0.7,root.rotation.x+(e.clientY-py)*0.003));
+    if(!dragging){ if(ctx.onHover) ctx.onHover(e); return; }
+    if(rotating){
+      root.rotation.y+=(e.clientX-px)*0.005;
+      root.rotation.x=Math.max(-0.7,Math.min(0.7,root.rotation.x+(e.clientY-py)*0.003));
+    } else if(ctx.onMove){ ctx.onMove(e); }
     px=e.clientX;py=e.clientY;
   });
-  cv.addEventListener('pointerup',e=>{dragging=false;cv.style.cursor='grab';});
-  cv.addEventListener('pointercancel',()=>{dragging=false;cv.style.cursor='grab';});
+  cv.addEventListener('pointerup',e=>{ if(!rotating&&ctx.onUp)ctx.onUp(e); dragging=false;rotating=false;cv.style.cursor=ctx.idleCursor||'grab'; });
+  cv.addEventListener('pointercancel',()=>{ if(!rotating&&ctx.onUp)ctx.onUp(); dragging=false;rotating=false;cv.style.cursor=ctx.idleCursor||'grab'; });
 
-  const ctx={scene,camera,renderer,root,panel,ctl:panel.querySelector('.vizctl'),read:panel.querySelector('.vizread')};
   const tick=def.build(ctx)||function(){};
   const handle={renderer,el:stage,raf:0,dead:false};
   if(window.ResizeObserver){
@@ -1102,61 +1115,156 @@ watch: red dot = centre of gravity (balance point) · the line below it = gravit
 /* =====================================================================
    V2 — THE PACKING PROBLEM  (scatter → pack → extrude walls)
    ===================================================================== */
-VIZ.a2={phase:1,title:'bin packing · η = parts / footprint',build(ctx){
-  const {root,camera,ctl,read}=ctx;
-  camera.position.set(0,300,260); camera.lookAt(0,0,0);
-  root.rotation.x=0.15;
-  const FW=19,FH=18; // footprint cm (one possible packing, gaps = 1 cm)
-  const parts=[ // name,w,d,colour, packed x,y (top-left in cm grid)
-    ['scissors',16,2,0x39d8ff, 1,1],
-    ['pens',    12,3,0x46e0a3, 1,4],
-    ['sticky',   8,8,0xffb340, 1,8],
-    ['phone',    8,2,0xb08cff,10,8],
-    ['eraser',   5,3,0xff5d72,10,11],
-    ['usb',      6,2,0x7ae6ff,10,15],
-  ];
-  const S=14; // px per cm
-  const grid=new THREE.GridHelper(FW*S,FW,0x27405f,0x1a2c46);
-  grid.position.set(0,0.1,0); root.add(grid);
-  const base=vBox(FW*S,4,FH*S,0x16263f); base.position.y=-2; root.add(base);
-  // outer wall frame (appears on extrude)
-  const wallMat=vMat(0x24405f,{transparent:true,opacity:0});
-  const walls=[];
-  function mkWall(w,d,x,z){const m=new THREE.Mesh(new THREE.BoxGeometry(w,34,d),wallMat);m.position.set(x,17,z);root.add(m);walls.push(m);}
-  mkWall(FW*S+12,6,0,-(FH*S)/2-3); mkWall(FW*S+12,6,0,(FH*S)/2+3);
-  mkWall(6,FH*S,-(FW*S)/2-3,0);    mkWall(6,FH*S,(FW*S)/2+3,0);
+/* Interactive 2D bin-packing: students DRAG real compartments, rotate with R,
+   keep a 1 cm wall-gap, and watch the footprint area + efficiency update live.
+   Top-down view; the engine's drag-to-rotate is claimed so drags move tiles. */
+VIZ.a2={phase:1,title:'bin packing · η = parts / footprint',
+  hint:'drag the tiles · press R to rotate the selected one',build(ctx){
+  const {root,camera,ctl,read,canvas}=ctx;
+  const S=18, TH=9, BW=28, BD=19;          // px/cm · tile thickness · board (cm)
+  const PARTAREA=175;                       // sum of the six compartment areas
+  camera.up.set(0,0,-1);
+  camera.position.set(0,455,0.001); camera.lookAt(0,0,0);
+  root.rotation.set(0,0,0);
+  ctx.idleCursor='default';
+  canvas.style.touchAction='none';          // let touch drags move tiles, not scroll
 
-  const tiles=[];
-  parts.forEach((p,i)=>{
-    const [name,w,d,col,gx,gy]=p;
-    const m=vBox(w*S-2,8,d*S-2,col,{transparent:true,opacity:0.92});
-    // scattered start
-    const ang=i/parts.length*Math.PI*2;
-    m.userData={ name,
-      from:new THREE.Vector3(Math.cos(ang)*200,(i%3)*14+5,Math.sin(ang)*150),
-      to:new THREE.Vector3((gx+w/2)*S-FW*S/2,5,(gy+d/2)*S-FH*S/2),
-      area:w*d };
-    m.position.copy(m.userData.from);
-    root.add(m); tiles.push(m);
-  });
-  let packT=0, packing=false, extruded=0, extruding=false;
-  const partArea=parts.reduce((a,p)=>a+p[1]*p[2],0);
-  vBtn(ctl,'▶ Pack it',()=>{packing=true;packT=0;});
-  vBtn(ctl,'⬆ Extrude walls',()=>{extruding=true;});
-  vBtn(ctl,'↺ Scatter',()=>{packing=false;packT=0;extruding=false;extruded=0;tiles.forEach(t=>t.position.copy(t.userData.from));wallMat.opacity=0;});
-  return function(dt){
-    if(packing&&packT<1){
-      packT=Math.min(1,packT+dt*0.8);
-      const e=packT<.5?2*packT*packT:1-Math.pow(-2*packT+2,2)/2;
-      tiles.forEach(t=>t.position.lerpVectors(t.userData.from,t.userData.to,e));
-    }
-    if(extruding&&extruded<1){extruded=Math.min(1,extruded+dt*1.2);wallMat.opacity=0.9*extruded;}
-    walls.forEach(w=>{w.scale.y=Math.max(0.001,extruded);w.position.y=17*extruded;});
-    const foot=FW*FH;
+  const wX=cx=>(cx-BW/2)*S, wZ=cz=>(cz-BD/2)*S;        // cm → world
+  const cX=x=>x/S+BW/2,    cZ=z=>z/S+BD/2;              // world → cm
+
+  // board + 1 cm grid
+  const base=vBox(BW*S,4,BD*S,0x12203a); base.position.y=-3; root.add(base);
+  const grid=new THREE.GridHelper(Math.max(BW,BD)*S,Math.max(BW,BD),0x27405f,0x18283f);
+  grid.position.y=-0.6; root.add(grid);
+
+  // live footprint frame (4 cyan bars)
+  const frameMat=vMat(0x39d8ff,{emissive:0x39d8ff,emissiveIntensity:0.45,transparent:true,opacity:0.95});
+  const fBar=()=>{const m=new THREE.Mesh(new THREE.BoxGeometry(1,3,1),frameMat);root.add(m);return m;};
+  const fBars=[fBar(),fBar(),fBar(),fBar()];
+  function setFrame(x0,x1,z0,z1){
+    const w=(x1-x0)*S, d=(z1-z0)*S, mx=wX((x0+x1)/2), mz=wZ((z0+z1)/2), t=3;
+    fBars[0].scale.set(w+t,1,1); fBars[0].position.set(mx,2,wZ(z0));
+    fBars[1].scale.set(w+t,1,1); fBars[1].position.set(mx,2,wZ(z1));
+    fBars[2].scale.set(1,1,d+t); fBars[2].position.set(wX(x0),2,mz);
+    fBars[3].scale.set(1,1,d+t); fBars[3].position.set(wX(x1),2,mz);
+  }
+
+  const COL={scissors:0x39d8ff,pens:0x46e0a3,sticky:0xffb340,phone:0xb08cff,eraser:0xff5d72,usb:0x7ae6ff};
+  const INIT=[ // name, w, d, start centre (cx,cz) — a deliberately wasteful spread
+    ['scissors',16,2, 9,1.5],['pens',12,3, 8,6],['sticky',8,8, 5,13],
+    ['phone',8,2,22,6],['eraser',5,3,21,11],['usb',6,2,20,15],
+  ];
+  const TILES=[];
+  function setLabel(t){
+    if(t.userData.lbl){ const s=t.userData.lbl; t.remove(s); if(s.material){if(s.material.map)s.material.map.dispose();s.material.dispose();} }
+    const u=t.userData, lbl=vLabel(`${u.name} ${u.w}×${u.d}`,'#08141f',Math.min(u.w,u.d)*S*1.1+30,true);
+    lbl.position.set(0,TH/2+5,0); t.add(lbl); u.lbl=lbl;
+  }
+  function setDims(t,w,d){
+    const u=t.userData; u.w=w; u.d=d;
+    t.geometry.dispose(); t.geometry=new THREE.BoxGeometry(w*S-3,TH,d*S-3);
+    setLabel(t); place(t);
+  }
+  function place(t){ t.position.set(wX(t.userData.cx),TH/2,wZ(t.userData.cz)); }
+  function clampTile(t){ const u=t.userData;
+    u.cx=Math.max(u.w/2,Math.min(BW-u.w/2,u.cx));
+    u.cz=Math.max(u.d/2,Math.min(BD-u.d/2,u.cz)); }
+  function snap(t){ const u=t.userData;
+    u.cx=Math.round(u.cx-u.w/2)+u.w/2; u.cz=Math.round(u.cz-u.d/2)+u.d/2; clampTile(t); place(t); }
+  function makeTile(name,w,d,cx,cz){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(w*S-3,TH,d*S-3),vMat(COL[name],{transparent:true,opacity:0.96,roughness:0.5}));
+    m.userData={name,w,d,w0:w,d0:d,cx,cz,bad:false,tgt:null,lbl:null};
+    root.add(m); TILES.push(m); setLabel(m); place(m); return m;
+  }
+  INIT.forEach(p=>makeTile(...p));
+
+  let sel=null, grab=null, bestArea=Infinity;
+  // a clash = edges closer than 1 cm → expand each rect by 0.5 cm and test overlap
+  function clash(a,b){ const A=a.userData,B=b.userData,e=0.011;
+    const ovx=Math.min(A.cx+A.w/2+0.5,B.cx+B.w/2+0.5)-Math.max(A.cx-A.w/2-0.5,B.cx-B.w/2-0.5);
+    const ovz=Math.min(A.cz+A.d/2+0.5,B.cz+B.d/2+0.5)-Math.max(A.cz-A.d/2-0.5,B.cz-B.d/2-0.5);
+    return ovx>e && ovz>e; }
+  let state={W:0,D:0,area:0,eta:0,clashes:0,valid:false};
+  function recompute(){
+    TILES.forEach(t=>t.userData.bad=false);
+    let clashes=0;
+    for(let i=0;i<TILES.length;i++)for(let j=i+1;j<TILES.length;j++)
+      if(clash(TILES[i],TILES[j])){TILES[i].userData.bad=true;TILES[j].userData.bad=true;clashes++;}
+    let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;
+    TILES.forEach(t=>{const u=t.userData;
+      x0=Math.min(x0,u.cx-u.w/2); x1=Math.max(x1,u.cx+u.w/2);
+      z0=Math.min(z0,u.cz-u.d/2); z1=Math.max(z1,u.cz+u.d/2);});
+    const W=(x1-x0)+2, D=(z1-z0)+2, area=W*D, valid=clashes===0;   // +2 = 1 cm outer wall each side
+    if(valid && area<bestArea) bestArea=area;
+    setFrame(x0-1,x1+1,z0-1,z1+1);
+    state={W:Math.round(W),D:Math.round(D),area:Math.round(area),eta:(PARTAREA/area*100).toFixed(0),clashes,valid};
+    // colour: clashing tiles glow red, others sit at their own colour
+    TILES.forEach(t=>{ t.material.emissive.setHex(t.userData.bad?0xff2233:0x000000);
+      t.material.emissiveIntensity=t.userData.bad?0.55:0; });
+    updateReadout();
+  }
+  function updateReadout(){
+    const s=state;
     read.innerHTML=
-`compartments add up to ${partArea} cm²   ·   this footprint = ${FW} × ${FH} = ${foot} cm²
-packing efficiency η = ${partArea} / ${foot} = <b>${(partArea/foot*100).toFixed(1)}%</b>   (every gap is a 1 cm wall)
-challenge: this layout is NOT optimal — beat ${foot} cm² on paper and prove it survives the audit`;
+`drag each compartment into the caddy · the cyan frame is your footprint (parts + a 1 cm wall all round)
+compartments are fixed at <b>${PARTAREA} cm²</b>   ·   footprint = ${s.W} × ${s.D} = <b>${s.area} cm²</b>   ·   η = ${PARTAREA} / ${s.area} = <b>${s.eta}%</b>   ${s.valid?'<span class="ok">✓ valid — no clashes</span>':'<span class="bad">⚠ '+s.clashes+' clash'+(s.clashes>1?'es':'')+' — drag the red tiles apart (1 cm gap)</span>'}
+${bestArea<Infinity?'best valid so far <b>'+Math.round(bestArea)+' cm²</b> ('+(PARTAREA/bestArea*100).toFixed(0)+'%) · ':''}this exact puzzle runs warehouses, shipping containers, RAM & laser-cut sheets — it's "bin packing", officially NP-hard`;
+  }
+
+  // raycast picking against the y = TH/2 plane
+  const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+  const plane=new THREE.Plane(new THREE.Vector3(0,1,0),-(TH/2));
+  function aim(e){ const r=canvas.getBoundingClientRect();
+    ndc.x=((e.clientX-r.left)/r.width)*2-1; ndc.y=-((e.clientY-r.top)/r.height)*2+1;
+    ray.setFromCamera(ndc,camera); }
+  function pick(e){ aim(e); const h=ray.intersectObjects(TILES,false); return h.length?h[0].object:null; }
+  function ground(e){ aim(e); const p=new THREE.Vector3(); ray.ray.intersectPlane(plane,p); return p?{cx:cX(p.x),cz:cZ(p.z)}:null; }
+
+  ctx.onDown=e=>{ const t=pick(e);
+    if(t){ sel=t; const g=ground(e); grab=g?{dx:g.cx-t.userData.cx,dz:g.cz-t.userData.cz}:{dx:0,dz:0}; t.userData.tgt=null; }
+    else sel=null;
+    recompute(); return true; };          // always claim → never rotates the scene
+  ctx.onMove=e=>{ if(!sel||!grab)return; const g=ground(e); if(!g)return;
+    sel.userData.cx=g.cx-grab.dx; sel.userData.cz=g.cz-grab.dz; clampTile(sel); place(sel); recompute(); };
+  ctx.onUp=()=>{ if(sel){ snap(sel); recompute(); } grab=null; };
+  ctx.onHover=e=>{ canvas.style.cursor=pick(e)?'grab':'default'; };
+
+  function rotateSel(){ if(!sel)return; const u=sel.userData; setDims(sel,u.d,u.w); snap(sel); recompute(); }
+  function resetAll(){ TILES.forEach((t,i)=>{ const p=INIT[i]; t.userData.tgt=null;
+    if(t.userData.w!==p[1]||t.userData.d!==p[2]) setDims(t,p[1],p[2]);
+    t.userData.cx=p[3]; t.userData.cz=p[4]; place(t); }); sel=null; recompute(); }
+  // greedy shelf packer — "the computer's first attempt" for them to beat by hand
+  function autoSolve(){
+    const order=TILES.slice().sort((a,b)=>b.userData.d0-a.userData.d0);
+    let x=0,z=0,shelfH=0; const maxW=18;
+    order.forEach(t=>{ if(t.userData.w!==t.userData.w0) setDims(t,t.userData.w0,t.userData.d0);
+      const w=t.userData.w0,d=t.userData.d0;
+      if(x+w>maxW){ z+=shelfH+1; x=0; shelfH=0; }
+      t.userData.tgt={cx:x+w/2,cz:z+d/2}; x+=w+1; shelfH=Math.max(shelfH,d); });
+    sel=null; }
+
+  vBtn(ctl,'⟳ Rotate (R)',rotateSel);
+  vBtn(ctl,"⚡ Computer's try",autoSolve);
+  vBtn(ctl,'↺ Reset',resetAll);
+
+  // keyboard R (self-removes once this viz is gone)
+  function onKey(ev){ if(!canvas.isConnected){document.removeEventListener('keydown',onKey);return;}
+    if((ev.key==='r'||ev.key==='R')){ const tag=document.activeElement&&document.activeElement.tagName;
+      if(tag!=='INPUT'){ ev.preventDefault(); rotateSel(); } } }
+  document.addEventListener('keydown',onKey);
+
+  recompute();
+  return function(dt,t){
+    let moving=false;
+    TILES.forEach(tl=>{ const g=tl.userData.tgt; if(g){ moving=true;
+      tl.userData.cx+=(g.cx-tl.userData.cx)*Math.min(1,dt*7);
+      tl.userData.cz+=(g.cz-tl.userData.cz)*Math.min(1,dt*7);
+      if(Math.abs(g.cx-tl.userData.cx)<0.02&&Math.abs(g.cz-tl.userData.cz)<0.02){ snap(tl); tl.userData.tgt=null; }
+      else place(tl);
+    }});
+    if(moving) recompute();
+    if(sel){ sel.material.emissive.setHex(sel.userData.bad?0xff2233:0x39d8ff);
+      sel.material.emissiveIntensity=(sel.userData.bad?0.55:0.3)+0.18*Math.sin(t*6); }
   };
 }};
 
