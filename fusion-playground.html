@@ -758,6 +758,7 @@ arrowUp:`<path d="M12 19V6M7.5 10 12 5.5l4.5 4.5" ${S1}/>`,
 arrowDown:`<path d="M12 5v13M7.5 14 12 18.5 16.5 14" ${S1}/>`,
 isolate:`<circle cx="12" cy="12" r="3" ${SB}/><path d="M12 3v4M12 17v4M3 12h4M17 12h4" stroke="${IC_G}" stroke-width="1.5" stroke-linecap="round"/>`,
 };
+ICONS.textIc=`<g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 6h14M12 6v13M9 19h6"/></g>`;
 function IC(name,cls){const b=ICONS[name]||ICONS.warning;return `<svg class="${cls||'i24'}" viewBox="0 0 24 24" aria-hidden="true">${b}</svg>`;}
 
 /* ============================================================
@@ -1699,17 +1700,182 @@ function bevelStackGeometry(shape,depth,bev,chamfer){
   return ensureOutward(g);
 }
 function bakeMatrix(geom,m){geom.applyMatrix4(m);return geom;}
-function geomsUnion(geoms){ // merge triangle soups (no boolean) for multi-profile single tool
+function geomsUnion(geoms){ // true boolean union for multi-profile tools feeding cut/join booleans
   if(geoms.length===1)return geoms[0];
   let solid=CSG.fromGeometry(geoms[0],null);
   for(let i=1;i<geoms.length;i++)solid=solid.union(CSG.fromGeometry(geoms[i],null));
   return CSG.toGeometry(solid);
 }
+function mergeGeomSoup(geoms){ // overlapping-shell merge: instant, renders/prints as one solid.
+  // Used for New Body multi-profile extrudes (e.g. gear = disc + N teeth) where a 25-way BSP
+  // union costs seconds per recompute for zero visible gain — the coil screw precedent.
+  if(geoms.length===1)return geoms[0];
+  let total=0;const arrs=geoms.map(g=>{const gg=g.index?g.toNonIndexed():g;
+    const a=gg.attributes.position.array;total+=a.length;return a;});
+  const out=new Float32Array(total);let o=0;
+  for(const a of arrs){out.set(a,o);o+=a.length;}
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(out,3));
+  g.computeVertexNormals();
+  return g;
+}
 function bboxOf(g){g.computeBoundingBox();return g.boundingBox.clone();}
+function trisTouchBox(geom,box){ // any surface triangle's AABB intersects the box?
+  const p=geom.attributes.position.array;
+  const minx=box.min.x,miny=box.min.y,minz=box.min.z,maxx=box.max.x,maxy=box.max.y,maxz=box.max.z;
+  for(let i=0;i<p.length;i+=9){
+    const ax=p[i],ay=p[i+1],az=p[i+2],bx=p[i+3],by=p[i+4],bz=p[i+5],cx=p[i+6],cy=p[i+7],cz=p[i+8];
+    if(Math.min(ax,bx,cx)>maxx||Math.max(ax,bx,cx)<minx)continue;
+    if(Math.min(ay,by,cy)>maxy||Math.max(ay,by,cy)<miny)continue;
+    if(Math.min(az,bz,cz)>maxz||Math.max(az,bz,cz)<minz)continue;
+    return true;
+  }
+  return false;
+}
+function pointInsideGeom(g,px,py,pz){ // ray-parity along +z, material-independent
+  const p=g.attributes.position.array;let cross=0;
+  for(let i=0;i<p.length;i+=9){
+    const ax=p[i],ay=p[i+1],az=p[i+2],bx=p[i+3],by=p[i+4],bz=p[i+5],cx=p[i+6],cy=p[i+7],cz=p[i+8];
+    const d1=(px-bx)*(ay-by)-(ax-bx)*(py-by);
+    const d2=(px-cx)*(by-cy)-(bx-cx)*(py-cy);
+    const d3=(px-ax)*(cy-ay)-(cx-ax)*(py-ay);
+    const neg=(d1<0)||(d2<0)||(d3<0),pos=(d1>0)||(d2>0)||(d3>0);
+    if(neg&&pos)continue;
+    const ux=bx-ax,uy=by-ay,vx=cx-ax,vy=cy-ay;
+    const uz=bz-az,vz=cz-az;
+    const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+    if(Math.abs(nz)<1e-12)continue;
+    const z=az-((px-ax)*nx+(py-ay)*ny)/nz;
+    if(z>pz)cross++;
+  }
+  return (cross%2)===1;
+}
+function _ss2(p1,q1,p2,q2){ // segment-segment distance squared (Ericson)
+  const d1x=q1[0]-p1[0],d1y=q1[1]-p1[1],d1z=q1[2]-p1[2];
+  const d2x=q2[0]-p2[0],d2y=q2[1]-p2[1],d2z=q2[2]-p2[2];
+  const rx=p1[0]-p2[0],ry=p1[1]-p2[1],rz=p1[2]-p2[2];
+  const a=d1x*d1x+d1y*d1y+d1z*d1z,e=d2x*d2x+d2y*d2y+d2z*d2z;
+  const f=d2x*rx+d2y*ry+d2z*rz;
+  let s,t;
+  if(a<=1e-30&&e<=1e-30){s=0;t=0;}
+  else if(a<=1e-30){s=0;t=Math.max(0,Math.min(1,f/e));}
+  else{const c=d1x*rx+d1y*ry+d1z*rz;
+    if(e<=1e-30){t=0;s=Math.max(0,Math.min(1,-c/a));}
+    else{const b=d1x*d2x+d1y*d2y+d1z*d2z,den=a*e-b*b;
+      s=den>1e-30?Math.max(0,Math.min(1,(b*f-c*e)/den)):0;
+      t=(b*s+f)/e;
+      if(t<0){t=0;s=Math.max(0,Math.min(1,-c/a));}
+      else if(t>1){t=1;s=Math.max(0,Math.min(1,(b-c)/a));}}}
+  const dx=p1[0]+d1x*s-(p2[0]+d2x*t),dy=p1[1]+d1y*s-(p2[1]+d2y*t),dz=p1[2]+d1z*s-(p2[2]+d2z*t);
+  return dx*dx+dy*dy+dz*dz;
+}
+function _pt2(p,a,b,c){ // point-triangle distance squared (Ericson closest point)
+  const abx=b[0]-a[0],aby=b[1]-a[1],abz=b[2]-a[2];
+  const acx=c[0]-a[0],acy=c[1]-a[1],acz=c[2]-a[2];
+  const apx=p[0]-a[0],apy=p[1]-a[1],apz=p[2]-a[2];
+  const d1=abx*apx+aby*apy+abz*apz,d2=acx*apx+acy*apy+acz*apz;
+  const sq=(x,y,z)=>x*x+y*y+z*z;
+  if(d1<=0&&d2<=0)return sq(apx,apy,apz);
+  const bpx=p[0]-b[0],bpy=p[1]-b[1],bpz=p[2]-b[2];
+  const d3=abx*bpx+aby*bpy+abz*bpz,d4=acx*bpx+acy*bpy+acz*bpz;
+  if(d3>=0&&d4<=d3)return sq(bpx,bpy,bpz);
+  const vc=d1*d4-d3*d2;
+  if(vc<=0&&d1>=0&&d3<=0){const v=d1/(d1-d3);return sq(apx-v*abx,apy-v*aby,apz-v*abz);}
+  const cpx=p[0]-c[0],cpy=p[1]-c[1],cpz=p[2]-c[2];
+  const d5=abx*cpx+aby*cpy+abz*cpz,d6=acx*cpx+acy*cpy+acz*cpz;
+  if(d6>=0&&d5<=d6)return sq(cpx,cpy,cpz);
+  const vb=d5*d2-d1*d6;
+  if(vb<=0&&d2>=0&&d6<=0){const w=d2/(d2-d6);return sq(apx-w*acx,apy-w*acy,apz-w*acz);}
+  const va=d3*d6-d5*d4;
+  if(va<=0&&(d4-d3)>=0&&(d5-d6)>=0){const w=(d4-d3)/((d4-d3)+(d5-d6));
+    return sq(bpx-w*(c[0]-b[0]),bpy-w*(c[1]-b[1]),bpz-w*(c[2]-b[2]));}
+  const den=1/(va+vb+vc),v=vb*den,w=vc*den;
+  return sq(apx-(v*abx+w*acx),apy-(v*aby+w*acy),apz-(v*abz+w*acz));
+}
+function _segTriHit(p,q,a,b,c){ // does segment pq pierce triangle abc?
+  const dx=q[0]-p[0],dy=q[1]-p[1],dz=q[2]-p[2];
+  const e1x=b[0]-a[0],e1y=b[1]-a[1],e1z=b[2]-a[2];
+  const e2x=c[0]-a[0],e2y=c[1]-a[1],e2z=c[2]-a[2];
+  const hx=dy*e2z-dz*e2y,hy=dz*e2x-dx*e2z,hz=dx*e2y-dy*e2x;
+  const det=e1x*hx+e1y*hy+e1z*hz;
+  if(Math.abs(det)<1e-12)return false;
+  const inv=1/det,sx=p[0]-a[0],sy=p[1]-a[1],sz=p[2]-a[2];
+  const u=(sx*hx+sy*hy+sz*hz)*inv;
+  if(u<-1e-9||u>1+1e-9)return false;
+  const qx=sy*e1z-sz*e1y,qy=sz*e1x-sx*e1z,qz=sx*e1y-sy*e1x;
+  const v=(dx*qx+dy*qy+dz*qz)*inv;
+  if(v<-1e-9||u+v>1+1e-9)return false;
+  const t=(e2x*qx+e2y*qy+e2z*qz)*inv;
+  return t>=-1e-9&&t<=1+1e-9;
+}
+function triTriClose(A,B,e2){ // triangles as [[x,y,z]x3]; within sqrt(e2) or intersecting?
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++)
+    if(_ss2(A[i],A[(i+1)%3],B[j],B[(j+1)%3])<=e2)return true;
+  for(let i=0;i<3;i++){if(_pt2(A[i],B[0],B[1],B[2])<=e2)return true;
+    if(_pt2(B[i],A[0],A[1],A[2])<=e2)return true;}
+  for(let i=0;i<3;i++){if(_segTriHit(A[i],A[(i+1)%3],B[0],B[1],B[2]))return true;
+    if(_segTriHit(B[i],B[(i+1)%3],A[0],A[1],A[2]))return true;}
+  return false;
+}
+function geomsProximate(toolGeom,bodyGeom,eps){
+  // true surface proximity: grid broadphase on triangle AABBs, then an exact
+  // triangle-to-triangle narrow phase. Box tests alone cannot tell a shaft riding with
+  // clearance inside a ring-shaped tool from real contact (long wall triangles and
+  // annular cap triangles both have huge, misleading AABBs).
+  const tb=bboxOf(toolGeom);tb.expandByScalar(eps);
+  const G=16;
+  const sx=(tb.max.x-tb.min.x)/G||1e-9,sy=(tb.max.y-tb.min.y)/G||1e-9,sz=(tb.max.z-tb.min.z)/G||1e-9;
+  const clampI=(v,s)=>Math.max(0,Math.min(G-1,Math.floor(v/s)));
+  const cells=new Map();
+  const tp=toolGeom.attributes.position.array;
+  for(let t=0;t<tp.length;t+=9){
+    const minx=Math.min(tp[t],tp[t+3],tp[t+6])-eps,maxx=Math.max(tp[t],tp[t+3],tp[t+6])+eps;
+    const miny=Math.min(tp[t+1],tp[t+4],tp[t+7])-eps,maxy=Math.max(tp[t+1],tp[t+4],tp[t+7])+eps;
+    const minz=Math.min(tp[t+2],tp[t+5],tp[t+8])-eps,maxz=Math.max(tp[t+2],tp[t+5],tp[t+8])+eps;
+    const i0=clampI(minx-tb.min.x,sx),i1=clampI(maxx-tb.min.x,sx);
+    const j0=clampI(miny-tb.min.y,sy),j1=clampI(maxy-tb.min.y,sy);
+    const k0=clampI(minz-tb.min.z,sz),k1=clampI(maxz-tb.min.z,sz);
+    for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)for(let k=k0;k<=k1;k++){
+      const kk=i*G*G+j*G+k;let arr=cells.get(kk);if(!arr){arr=[];cells.set(kk,arr);}
+      arr.push(minx,miny,minz,maxx,maxy,maxz,
+        tp[t],tp[t+1],tp[t+2],tp[t+3],tp[t+4],tp[t+5],tp[t+6],tp[t+7],tp[t+8]);
+    }
+  }
+  const e2=eps*eps;
+  const bp=bodyGeom.attributes.position.array;
+  for(let t=0;t<bp.length;t+=9){
+    const minx=Math.min(bp[t],bp[t+3],bp[t+6]),maxx=Math.max(bp[t],bp[t+3],bp[t+6]);
+    if(maxx<tb.min.x||minx>tb.max.x)continue;
+    const miny=Math.min(bp[t+1],bp[t+4],bp[t+7]),maxy=Math.max(bp[t+1],bp[t+4],bp[t+7]);
+    if(maxy<tb.min.y||miny>tb.max.y)continue;
+    const minz=Math.min(bp[t+2],bp[t+5],bp[t+8]),maxz=Math.max(bp[t+2],bp[t+5],bp[t+8]);
+    if(maxz<tb.min.z||minz>tb.max.z)continue;
+    const i0=clampI(minx-tb.min.x,sx),i1=clampI(maxx-tb.min.x,sx);
+    const j0=clampI(miny-tb.min.y,sy),j1=clampI(maxy-tb.min.y,sy);
+    const k0=clampI(minz-tb.min.z,sz),k1=clampI(maxz-tb.min.z,sz);
+    const B=[[bp[t],bp[t+1],bp[t+2]],[bp[t+3],bp[t+4],bp[t+5]],[bp[t+6],bp[t+7],bp[t+8]]];
+    for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++)for(let k=k0;k<=k1;k++){
+      const arr=cells.get(i*G*G+j*G+k);if(!arr)continue;
+      for(let a=0;a<arr.length;a+=15){
+        if(minx>arr[a+3]||maxx<arr[a]||miny>arr[a+4]||maxy<arr[a+1]||minz>arr[a+5]||maxz<arr[a+2])continue;
+        const A=[[arr[a+6],arr[a+7],arr[a+8]],[arr[a+9],arr[a+10],arr[a+11]],[arr[a+12],arr[a+13],arr[a+14]]];
+        if(triTriClose(A,B,e2))return true;
+      }
+    }
+  }
+  return false;
+}
 function applyBooleanOp(f,toolGeom,opName){
   const op=opName||f.params.op;
   const tb=bboxOf(toolGeom);tb.expandByScalar(.01);
-  const hitBodies=Bodies.filter(b=>{const bb=bboxOf(b.geom);return bb.intersectsBox(tb);});
+  const tc=tb.getCenter(new THREE.Vector3());
+  // candidate test: bbox overlap alone falsely welds separate parts living inside a bigger
+  // part's bounding envelope (a crankshaft in its block, an axle in its bearing bore).
+  // Require real material contact: surface-to-surface proximity within 0.05, or (for buried
+  // cut tools) the tool centre sitting inside the body's volume.
+  const hitBodies=Bodies.filter(b=>{const bb=bboxOf(b.geom);
+    if(!bb.intersectsBox(tb))return false;
+    return geomsProximate(toolGeom,b.geom,0.05)||pointInsideGeom(b.geom,tc.x,tc.y,tc.z);});
   if(op==='new'||!hitBodies.length&&op==='join'){
     makeBody(f.id,toolGeom,null);f._produced=f.id;return;
   }
@@ -1760,7 +1926,8 @@ const FeatureExec={
     else if(f.params.flip){z0=-f.params.dist;z1=0;}
     const geoms=shapesToWorldGeom(shapes,z0,z1,THREE.MathUtils.degToRad(f.params.taper||0),m);
     const M=planeMatrix(sk.plane);
-    let tool=geomsUnion(geoms.map(g=>bakeMatrix(g,M)));
+    const baked=geoms.map(g=>bakeMatrix(g,M));
+    let tool=(f.params.op==='new'&&baked.length>1)?mergeGeomSoup(baked):geomsUnion(baked);
     if(m.shell)tool=shellGeom(tool,shapes,sk,z0,z1,m);
     if(tool.index)tool=tool.toNonIndexed();
     ensureOutward(tool); // ExtrudeGeometry's bevel path can emit inside-out solids, which makes CSG eat the target
@@ -2435,6 +2602,7 @@ const SketchTools={
   sfillet:{prompt:'Sketch fillet: click two lines meeting at a corner',click(p,e,hit){sketchFilletClick(p,hit);},move(){},esc(){App.sfSel=[];}},
   patcirc:{prompt:'Circular Pattern: select entities (Select tool), run this, then click the centre point',click(p,e,hit){patternCircClick(p);},move(){},esc(){}},
   patlin:{prompt:'Rectangular Pattern: select entities, then click the direction start and end points',click(p,e,hit){patternLinClick(p);},move(){},esc(){App.patLinPts=null;}},
+  text:{prompt:'Text: click where the text baseline starts',click(p,e,hit){if(!Array.isArray(p)||!isFinite(p[0])||!isFinite(p[1]))return;sketchTextAt([+p[0],+p[1]]);},move(){},esc(){}},
 };
 function setSketchTool(name){
   if(App.mode!=='sketch')return;
@@ -2882,7 +3050,8 @@ function xformCopyEnt(s,fn,rotA){ // duplicate a sketch entity through a point m
 function patternCircClick(p){
   const sk=App.activeSketch,sel=selectedEnts();
   if(!sel.length){toast('Select entities first (Select tool), then run Circular Pattern and click the centre','warn');return;}
-  const C=p.slice();
+  if(!Array.isArray(p)||!isFinite(p[0])||!isFinite(p[1])){toast('Click a point in the sketch to set the centre','warn');return;}
+  const C=[+p[0],+p[1]];
   prompt2({title:'Circular Pattern',icon:'patternCirc',fields:[{k:'n',label:'Quantity',val:'6'},{k:'ang',label:'Total angle \u00b0',val:'360'}]},v=>{
     const n=parseInt(v.n),tot=parseFloat(v.ang)||360;
     if(!(n>=2&&n<=96)){toast('Quantity must be 2\u201396','warn');return;}
@@ -2901,8 +3070,9 @@ function patternCircClick(p){
 function patternLinClick(p){
   const sk=App.activeSketch,sel=selectedEnts();
   if(!sel.length){toast('Select entities first (Select tool), then run Rectangular Pattern and click direction start + end','warn');return;}
+  if(!Array.isArray(p)||!isFinite(p[0])||!isFinite(p[1])){toast('Click a point in the sketch','warn');return;}
   App.patLinPts=App.patLinPts||[];
-  App.patLinPts.push(p.slice());
+  App.patLinPts.push([+p[0],+p[1]]);
   if(App.patLinPts.length<2){setPrompt('Click the direction <b>end</b> point \u2014 the click distance pre-fills the spacing');return;}
   const[A,B]=App.patLinPts;App.patLinPts=null;
   let d=[B[0]-A[0],B[1]-A[1]];const L=Math.hypot(d[0],d[1]);
@@ -2918,6 +3088,96 @@ function patternLinClick(p){
     Doc.saved=false;refreshSketch(sk);refreshChrome();
     setSketchTool('select');
     toast('Pattern \u00d7'+n+' at '+fmtLen(sp)+' spacing \ud83e\ude9c');
+  });
+}
+const SK_FONT=(function(){ // block/LCD stroke font: rect strokes R + thick-segment bands B on a 5x8 box
+  const T=[0,6.5,5,1.5],M=[0,3.25,5,1.5],Bo=[0,0,5,1.5],
+        LU=[0,3.25,1.5,4.75],LL=[0,0,1.5,4.75],RU=[3.5,3.25,1.5,4.75],RL=[3.5,0,1.5,4.75],
+        LV=[0,0,1.5,8],RV=[3.5,0,1.5,8],CV=[1.75,0,1.5,8];
+  const R=r=>({r}),B=b=>({b});
+  const F={};
+  F.A=[R(LV),R(RV),R(T),R(M)];
+  F.B=[R(LV),R(RV),R(T),R(M),R(Bo)];
+  F.C=[R(LV),R(T),R(Bo)];
+  F.D=[R(LV),R([0,0,4,1.5]),R([0,6.5,4,1.5]),R([3.5,0.75,1.5,6.5])];
+  F.E=[R(LV),R(T),R([0,3.25,4,1.5]),R(Bo)];
+  F.F=[R(LV),R(T),R([0,3.25,4,1.5])];
+  F.G=[R(LV),R(T),R(Bo),R([3.5,0,1.5,4.5]),R([2.2,3,2.2,1.5])]; // bar kept short: a stroke centroid inside a sibling stroke reads as a hole
+  F.H=[R(LV),R(RV),R(M)];
+  F.I=[R(CV),R(T),R(Bo)];
+  F.J=[R([3.5,0.75,1.5,7.25]),R(Bo),R([0,0.5,1.5,3])];
+  F.K=[R(LV),B([1.2,4,4.2,7.6]),B([1.2,4,4.2,0.4])];
+  F.L=[R(LV),R(Bo)];
+  F.M=[R(LV),R(RV),B([0.9,7.4,2.5,4.4]),B([4.1,7.4,2.5,4.4])];
+  F.N=[R(LV),R(RV),B([0.9,7.3,4.1,0.7])];
+  F.O=[R(LV),R(RV),R(T),R(Bo)];
+  F.P=[R(LV),R(T),R(M),R([3.5,3.25,1.5,4.75])];
+  F.Q=[R(LV),R([3.5,2,1.5,6]),R(T),R(Bo),B([3.3,2.6,5.2,0.6])];
+  F.R=[R(LV),R(T),R(M),R([3.5,3.25,1.5,4.75]),B([1.7,3.1,4.2,0.5])];
+  F.S=[R(T),R(M),R(Bo),R([0,3.9,1.5,3.35]),R([3.5,0.75,1.5,3.25])];
+  F.T=[R(T),R([1.75,0,1.5,6.5])];
+  F.U=[R([0,0.75,1.5,7.25]),R([3.5,0.75,1.5,7.25]),R(Bo)];
+  F.V=[B([0.75,7.6,2.2,0.6]),B([4.25,7.6,2.8,0.6])];
+  F.W=[R(LV),R(RV),B([0.9,0.6,2.5,3.6]),B([4.1,0.6,2.5,3.6])];
+  F.X=[B([0.6,7.5,4.4,0.5]),B([4.4,7.5,0.6,0.5])];
+  F.Y=[B([0.7,7.6,2.5,4.2]),B([4.3,7.6,2.5,4.2]),R([1.75,0,1.5,4.4])];
+  F.Z=[R(T),R(Bo),B([4.2,6.2,0.8,1.8])];
+  F['0']=[R(T),R(Bo),R(LU),R(LL),R(RU),R(RL)];
+  F['1']=[R(CV),R(Bo)];
+  F['2']=[R(T),R(RU),R(M),R(LL),R(Bo)];
+  F['3']=[R(T),R(RU),R(M),R(RL),R(Bo)];
+  F['4']=[R(LU),R(M),R(RU),R(RL)];
+  F['5']=[R(T),R(LU),R(M),R(RL),R(Bo)];
+  F['6']=[R(T),R(LU),R(M),R(LL),R(RL),R(Bo)];
+  F['7']=[R(T),R(RU),R(RL)];
+  F['8']=[R(T),R(M),R(Bo),R(LU),R(LL),R(RU),R(RL)];
+  F['9']=[R(T),R(LU),R(M),R(RU),R(RL),R(Bo)];
+  F['-']=[R(M)];
+  F['.']=[R([1.75,0,1.5,1.5])];
+  return F;
+})();
+function textStrokeQuads(str,origin,height){
+  const s=height/8,adv=6.5*s,ht=0.75*s;
+  const quads=[];let cx=origin[0];const cy=origin[1];
+  for(const chRaw of String(str)){
+    const ch=chRaw.toUpperCase();
+    if(ch===' '){cx+=adv;continue;}
+    const gl=SK_FONT[ch];
+    if(!gl){cx+=adv;continue;}
+    for(const st of gl){
+      if(st.r){let[x,y,w,h]=st.r;
+        // overshoot along the stroke's long axis so strokes never share graph nodes:
+        // coincident corners make the profile walker's angular sort ambiguous and mangle loops
+        const ov=0.15;
+        if(h>w){y-=ov;h+=2*ov;}else{x-=ov;w+=2*ov;}
+        quads.push([[cx+x*s,cy+y*s],[cx+(x+w)*s,cy+y*s],[cx+(x+w)*s,cy+(y+h)*s],[cx+x*s,cy+(y+h)*s]]);
+      }else{const[x1,y1,x2,y2]=st.b;
+        let dx=x2-x1,dy=y2-y1;const L=Math.hypot(dx,dy);dx/=L;dy/=L;
+        const ex=0.5;
+        const ax=cx+(x1-dx*ex)*s,ay=cy+(y1-dy*ex)*s,bx=cx+(x2+dx*ex)*s,by=cy+(y2+dy*ex)*s;
+        const nx=-dy*ht,ny=dx*ht;
+        quads.push([[ax+nx,ay+ny],[bx+nx,by+ny],[bx-nx,by-ny],[ax-nx,ay-ny]]);
+      }
+    }
+    cx+=adv;
+  }
+  return quads;
+}
+function sketchTextAt(p){
+  const sk=App.activeSketch;
+  prompt2({title:'SKETCH TEXT',icon:'textIc',fields:[{k:'txt',label:'Text',val:'AB'},{k:'h',label:'Height',val:'8'}]},v=>{
+    const txt=(v.txt||'').trim();
+    const h=parseLen(v.h);
+    if(!txt){toast('Type some text','warn');return;}
+    if(!(h>0.5)){toast('Height must be at least 0.5 mm','warn');return;}
+    const quads=textStrokeQuads(txt,p,h);
+    if(!quads.length){toast('No printable characters (A\u2013Z, 0\u20139, dash, dot)','warn');return;}
+    pushUndo();
+    for(const q of quads)for(let i=0;i<4;i++)
+      sk.ents.push({id:uid(),t:'line',a:q[i].slice(),b:q[(i+1)%4].slice()});
+    Doc.saved=false;refreshSketch(sk);refreshChrome();
+    setSketchTool('select');
+    toast('\u201c'+txt+'\u201d placed \u2014 '+quads.length+' stroke profiles. Extrude to emboss, or Cut \u22120.4 to engrave \u270d\ufe0f');
   });
 }
 function sketchFilletClick(p,hit){
@@ -3919,6 +4179,7 @@ const COMMANDS=[
   {id:'skMirror',label:'Mirror',icon:'mirror',sketch:true,desc:'Select entities, then click the mirror line.',run:()=>setSketchTool('mirror')},
   {id:'skPatternCirc',label:'Circular Pattern',icon:'patternCirc',sketch:true,desc:'Copy selected sketch entities around a centre \u2014 gear teeth, flutes, bolt circles.',run:()=>setSketchTool('patcirc')},
   {id:'skPatternLin',label:'Rectangular Pattern',icon:'patternRect',sketch:true,desc:'Copy selected sketch entities along a direction \u2014 rack teeth, serrations.',run:()=>setSketchTool('patlin')},
+  {id:'skText',label:'Text',icon:'textIc',sketch:true,desc:'Place block-letter text as sketch profiles \u2014 extrude to emboss or cut to engrave your name.',run:()=>setSketchTool('text')},
   {id:'skFillet',label:'Sketch Fillet',icon:'sketchFillet',sketch:true,desc:'Round the corner between two lines.',run:()=>setSketchTool('sfillet')},
   {id:'skConstruction',label:'Construction',key:'X',icon:'axisIc',sketch:true,desc:'Toggle construction geometry for new entities.',run:()=>{App.consMode=!App.consMode;const c=$('#sp-cons');if(c)c.classList.toggle('on',App.consMode);toast('Construction '+(App.consMode?'on':'off'));}},
 ];
@@ -4044,7 +4305,7 @@ const TAB_BUILDERS={
       (()=>{const col=el('div','tb-small-col');col.appendChild(smallBtn('skRectC'));col.appendChild(smallBtn('skPoint'));col.appendChild(smallBtn('skConstruction'));return col;})(),
     ],()=>[
       mi('skLine'),mi('skRect2'),mi('skRectC'),mi('skCircle'),mi('skArc'),'-',mi('skPatternCirc'),mi('skPatternLin'),'-',
-      mi('skPolygon'),mi('skSlot'),mi('skSpline'),mi('skPoint'),'-',
+      mi('skPolygon'),mi('skSlot'),mi('skSpline'),mi('skPoint'),mi('skText'),'-',
       miDis('Ellipse','ellipse'),miDis('Text','text'),miDis('Project','projectIc'),'-',mi('skConstruction'),
     ]));
     row.appendChild(toolGroup('Modify',[
@@ -5549,7 +5810,7 @@ boot();
       {y:[159,179],cmd:'skSpline'},
       {y:[179,199],dis:'Conic Curve'},
       {y:[199,219],cmd:'skPoint'},
-      {y:[219,240],dis:'Text'},
+      {y:[219,240],cmd:'skText'},
       {y:[241,260],cmd:'skMirror'},
       {y:[260,280],cmd:'skPatternCirc'},
       {y:[280,300],cmd:'skPatternLin'},
