@@ -801,6 +801,8 @@ const Doc={
   features:[],      // timeline items {id,type,params,suppressed,error}
   marker:0,         // timeline position (features executed = marker)
   bodyMeta:{},      // key -> {name,color,visible,shiny}
+  joints:[],        // assemble joints {id,name,type,comp1,comp2,axis,origin,value,min,max}
+  motionLinks:[],   // {id,name,j1,j2,v1,v2,reverse}
 };
 const App={
   mode:'idle',            // idle | sketch | pickPlane | command
@@ -968,9 +970,10 @@ const PLANE_LABEL={XY:'XY (Top)',XZ:'XZ (Front)',YZ:'YZ (Right)'};
 const consGroup=new THREE.Group();scene.add(consGroup);
 function planeBasis(name){ // Fusion origin planes, Z-up: XY=Top(ground) · XZ=Front · YZ=Right
   const O=new THREE.Vector3(),X=new THREE.Vector3(),Y=new THREE.Vector3(),N=new THREE.Vector3();
-  if(name==='XY'){X.set(1,0,0);Y.set(0,1,0);N.set(0,0,1);}
-  else if(name==='XZ'){X.set(1,0,0);Y.set(0,0,1);N.set(0,-1,0);}
-  else{X.set(0,1,0);Y.set(0,0,1);N.set(1,0,0);} // YZ
+  const nm=String(name||'XY').toUpperCase();   // case-insensitive: 'xy' used to fall through to YZ
+  if(nm==='YZ'){X.set(0,1,0);Y.set(0,0,1);N.set(1,0,0);}
+  else if(nm==='XZ'){X.set(1,0,0);Y.set(0,0,1);N.set(0,-1,0);}
+  else{X.set(1,0,0);Y.set(0,1,0);N.set(0,0,1);} // XY (default)
   return {origin:O,normal:N,xAxis:X,yAxis:Y};
 }
 function sketchPlaneBasis(plane){ // plane spec from a sketch or construction plane
@@ -1873,9 +1876,17 @@ function applyBooleanOp(f,toolGeom,opName){
   // part's bounding envelope (a crankshaft in its block, an axle in its bearing bore).
   // Require real material contact: surface-to-surface proximity within 0.05, or (for buried
   // cut tools) the tool centre sitting inside the body's volume.
-  const hitBodies=Bodies.filter(b=>{const bb=bboxOf(b.geom);
+  let hitBodies=Bodies.filter(b=>{const bb=bboxOf(b.geom);
     if(!bb.intersectsBox(tb))return false;
     return geomsProximate(toolGeom,b.geom,0.05)||pointInsideGeom(b.geom,tc.x,tc.y,tc.z);});
+  // Fusion's Objects field: when a target body is named, only that body is joined or cut.
+  // "Check the target body is the rack and not the clamp" only means something if this exists.
+  const tgt=f.params&&f.params.target;
+  if(tgt&&op!=='new'){
+    const only=hitBodies.filter(b=>b.key===tgt);
+    if(only.length)hitBodies=only;
+    else if(bodyByKey(tgt))hitBodies=[];
+  }
   if(op==='new'||!hitBodies.length&&op==='join'){
     makeBody(f.id,toolGeom,null);f._produced=f.id;return;
   }
@@ -1911,27 +1922,42 @@ function replaceBodyGeom(body,geom){
   computeFaceGroups(body);
 }
 function removeRuntimeBody(b){bodyGroup.remove(b.mesh);b.geom.dispose();Bodies=Bodies.filter(x=>x!==b);}
+/* ---------- extrude geometry helpers (shared by extrude, preview, patterns) ---------- */
+function extrudeZRange(pr){ // Fusion's Start Offset + Extent Type, in sketch-local Z
+  const st=pr.start||0;
+  let z0=0,z1=pr.dist;
+  if(pr.dir==='symmetric'){z0=-pr.dist/2;z1=pr.dist/2;}
+  else if(pr.dir==='two'){z0=-(pr.dist2||0);z1=pr.dist;}
+  else if(pr.flip){z0=-pr.dist;z1=0;}
+  if(pr.extent==='all'){ // "All" = through everything, described by intent not by a number
+    if(pr.dir==='symmetric'||pr.dir==='two'){z0=-1000;z1=1000;}
+    else if(pr.flip){z0=-1000;z1=0;}
+    else {z0=0;z1=1000;}
+  }
+  return [z0+st,z1+st];
+}
+function extrudeToolGeometry(f,mods){
+  const sk=findSketch(f.params.sketch);if(!sk)throw'Sketch missing';
+  const m=(mods&&mods[f.id])||{};
+  const shapes=buildShapes(sk,f.params.profiles||[],m.corners);
+  if(!shapes.length)throw'Profile not found — edit feature';
+  const zr=extrudeZRange(f.params),z0=zr[0],z1=zr[1];
+  const geoms=shapesToWorldGeom(shapes,z0,z1,THREE.MathUtils.degToRad(f.params.taper||0),m);
+  const M=planeMatrix(sk.plane);
+  const baked=geoms.map(g=>bakeMatrix(g,M));
+  let tool=(f.params.op==='new'&&baked.length>1)?mergeGeomSoup(baked):geomsUnion(baked);
+  if(m.shell)tool=shellGeom(tool,shapes,sk,z0,z1,m);
+  if(tool.index)tool=tool.toNonIndexed();
+  ensureOutward(tool); // ExtrudeGeometry's bevel path can emit inside-out solids, which makes CSG eat the target
+  return tool;
+}
 /* ---------- individual feature executors ---------- */
 const FeatureExec={
   sketchNew(f){/* existence gate only; drawing handled by refreshSketchGroups */},
   plane(f){RuntimePlanes.push({id:f.id,name:f.params.name||('Plane'+(RuntimePlanes.length+1)),base:f.params.base,dist:f.params.dist,visible:f.params.visible!==false});},
   extrude(f,mods){
     const sk=findSketch(f.params.sketch);if(!sk)throw'Sketch missing';
-    const m=mods[f.id]||{};
-    const shapes=buildShapes(sk,f.params.profiles||[],m.corners);
-    if(!shapes.length)throw'Profile not found — edit feature';
-    let z0=0,z1=f.params.dist;
-    if(f.params.dir==='symmetric'){z0=-f.params.dist/2;z1=f.params.dist/2;}
-    else if(f.params.dir==='two'){z0=-(f.params.dist2||0);z1=f.params.dist;}
-    else if(f.params.flip){z0=-f.params.dist;z1=0;}
-    const geoms=shapesToWorldGeom(shapes,z0,z1,THREE.MathUtils.degToRad(f.params.taper||0),m);
-    const M=planeMatrix(sk.plane);
-    const baked=geoms.map(g=>bakeMatrix(g,M));
-    let tool=(f.params.op==='new'&&baked.length>1)?mergeGeomSoup(baked):geomsUnion(baked);
-    if(m.shell)tool=shellGeom(tool,shapes,sk,z0,z1,m);
-    if(tool.index)tool=tool.toNonIndexed();
-    ensureOutward(tool); // ExtrudeGeometry's bevel path can emit inside-out solids, which makes CSG eat the target
-    applyBooleanOp(f,tool);
+    applyBooleanOp(f,extrudeToolGeometry(f,mods));
     sk._consumed=true;
   },
   revolve(f){
@@ -2142,6 +2168,7 @@ function recompute(){
     catch(err){f.error=typeof err==='string'?err:(err.message||'Failed');console.warn('Feature',f.type,f.error,err);}
   }
   applyBodyVisual();rebuildConsPlanesRT();refreshSketchGroups();buildBrowser();
+  if(typeof applyJointPoses==='function')applyJointPoses();
   if(App._markerDrag)refreshTimelineFuture();else buildTimeline();
 }
 function refreshTimelineFuture(){
@@ -2491,14 +2518,21 @@ const SketchTools={
     move(p,snap,e){pvClear();drawGuides(snap);
       const pts=App.toolPts;if(pts.length)pvLineLocal(pts[pts.length-1],p,0xffd76a);
       if(pts.length){
-        if(!dimhud.classList.contains('show'))showDimHud([{label:'L',val:''}],vals=>{
-          const len=vals[0];const last=App.toolPts[App.toolPts.length-1];
+        if(!dimhud.classList.contains('show'))showDimHud([{label:'L',val:''},{label:'X',val:''},{label:'Y',val:''}],vals=>{
+          const inputs=dimHudInputs();
+          const useXY=(inputs[1]&&inputs[1].dataset.dirty)||(inputs[2]&&inputs[2].dataset.dirty);
+          const last=App.toolPts[App.toolPts.length-1];
+          pushUndoOnce();
+          if(useXY){const x=vals[1],y=vals[2];
+            if(x!=null&&y!=null&&isFinite(x)&&isFinite(y))SketchTools.line.click([x,y]);
+            return;}
+          const len=vals[0];
           if(len>0&&App._dimCursor){const dx=App._dimCursor[0]-last[0],dy=App._dimCursor[1]-last[1];
             const d=Math.hypot(dx,dy)||1;
             SketchTools.line.click([last[0]+dx/d*len,last[1]+dy/d*len]);}});
         App._dimCursor=p.slice();
-        if(e)syncDimHud(e,[Math.hypot(p[0]-pts[pts.length-1][0],p[1]-pts[pts.length-1][1])]);
-      }},
+        if(e)syncDimHud(e,[Math.hypot(p[0]-pts[pts.length-1][0],p[1]-pts[pts.length-1][1]),p[0],p[1]]);
+      }else showXYHud(p,e);},
     esc(){App.toolPts=[];pvClear();hideDimHud();hideCursorTip();}},
   rect2:{prompt:'Rectangle: click two opposite corners — or type W × H and press Enter',
     click(p){const pts=App.toolPts;pts.push(p.slice());
@@ -2513,9 +2547,10 @@ const SketchTools={
         if(!dimhud.classList.contains('show'))showDimHud([{label:'W',val:''},{label:'H',val:''}],vals=>{
           const[w,h]=vals;const a2=App.toolPts[0];
           if(w>0&&h>0){const sx=Math.sign(App._dimCursor[0]-a2[0])||1,sy=Math.sign(App._dimCursor[1]-a2[1])||1;
-            SketchTools.rect2.click([a2[0]+sx*w,a2[1]+sy*h]);hideDimHud();}});
+            pushUndoOnce();SketchTools.rect2.click([a2[0]+sx*w,a2[1]+sy*h]);hideDimHud();}});
         App._dimCursor=p.slice();
-        if(e)syncDimHud(e,[Math.abs(p[0]-a[0]),Math.abs(p[1]-a[1])]);}},
+        if(e)syncDimHud(e,[Math.abs(p[0]-a[0]),Math.abs(p[1]-a[1])]);}
+      else if(!pts.length)showXYHud(p,e);},
     esc(){App.toolPts=[];pvClear();hideDimHud();}},
   rectC:{prompt:'Center rectangle: click center then a corner',
     click(p){const pts=App.toolPts;pts.push(p.slice());
@@ -2529,8 +2564,9 @@ const SketchTools={
         pvPtsLocal([[c[0]-dx,c[1]-dy],[c[0]+dx,c[1]-dy],[c[0]+dx,c[1]+dy],[c[0]-dx,c[1]+dy],[c[0]-dx,c[1]-dy]],0xffd76a);
         if(!dimhud.classList.contains('show'))showDimHud([{label:'W',val:''},{label:'H',val:''}],vals=>{
           const[w,h]=vals;const c2=App.toolPts[0];
-          if(w>0&&h>0){SketchTools.rectC.click([c2[0]+w/2,c2[1]+h/2]);hideDimHud();}});
-        if(e)syncDimHud(e,[dx*2,dy*2]);}},
+          if(w>0&&h>0){pushUndoOnce();SketchTools.rectC.click([c2[0]+w/2,c2[1]+h/2]);hideDimHud();}});
+        if(e)syncDimHud(e,[dx*2,dy*2]);}
+      else if(!pts.length)showXYHud(p,e);},
     esc(){App.toolPts=[];pvClear();hideDimHud();}},
   circle:{prompt:'Circle: click centre, then a point — or type Ø and press Enter',
     click(p){const pts=App.toolPts;pts.push(p.slice());
@@ -2544,8 +2580,9 @@ const SketchTools={
         pvPtsLocal(cir,0xffd76a);
         if(!dimhud.classList.contains('show'))showDimHud([{label:'Ø',val:''}],vals=>{
           const dia=vals[0];const c2=App.toolPts[0];
-          if(dia>0){SketchTools.circle.click([c2[0]+dia/2,c2[1]]);hideDimHud();}});
-        if(e)syncDimHud(e,[r*2]);}},
+          if(dia>0){pushUndoOnce();SketchTools.circle.click([c2[0]+dia/2,c2[1]]);hideDimHud();}});
+        if(e)syncDimHud(e,[r*2]);}
+      else if(!pts.length)showXYHud(p,e);},
     esc(){App.toolPts=[];pvClear();hideDimHud();}},
   arc3:{prompt:'Arc: click start, end, then a point on the arc',
     click(p){const pts=App.toolPts;pts.push(p.slice());
@@ -3067,6 +3104,86 @@ function patternCircClick(p){
     toast('Circular pattern \u00d7'+n+' \u2014 '+made+' new entities \u2699\ufe0f');
   });
 }
+function cmdSketchPatternRect(){
+  if(App.mode!=='sketch'){toast('Open a sketch first','warn');return;}
+  const sk=App.activeSketch;
+  const st={dir:[1,0],dirLabel:'horizontal',distType:'extent',qty:2,dist:10};
+  let sel=selectedEnts().slice();
+  const prevSelRender=renderSelection;
+  setSketchTool('select');
+  const d=makeDialog({title:'RECTANGULAR PATTERN',icon:'patternRect',
+    onOK(){
+      sel=selectedEnts().slice();
+      if(!sel.length){toast('Select the sketch entities to pattern','warn');return false;}
+      const offs=sketchPatternOffsets();
+      if(!offs.length){toast('Quantity must make at least one copy','warn');return false;}
+      pushUndo();
+      let made=0;
+      for(const t of offs){
+        const mv=q=>[q[0]+st.dir[0]*t,q[1]+st.dir[1]*t];
+        for(const en of sel){const c=xformCopyEnt(en,mv,0);if(c){sk.ents.push(c);made++;}}
+      }
+      Doc.saved=false;refreshSketch(sk);refreshChrome();
+      toast('Rectangular pattern ×'+st.qty+' — '+made+' new entities');
+      return true;
+    },
+    onClose(){renderSelection=prevSelRender;pvClear();}});
+  function sketchPatternOffsets(){
+    const q=Math.max(1,parseInt(st.qty)||1);
+    const step=(st.distType==='extent')?((st.dist||0)/Math.max(1,q-1)):(st.dist||0);
+    const out=[];for(let k=1;k<q;k++)out.push(k*step);
+    return out;
+  }
+  const objChip=dChip('Select',()=>{objChip.arm(true);setPrompt('Click the sketch entities to pattern');},
+    ()=>{clearSelection();refreshSketch(sk);paint();});
+  dRow(d.body,'Objects',objChip);
+  const dirChip=dChip('Select',()=>{dirChip.arm(true);App.skPatDirArm=true;
+      setPrompt('Click a straight sketch line to set the direction');},
+    ()=>{st.dir=[1,0];st.dirLabel='horizontal';dirSel.value='1,0';dirChip.setCount(0);paint();});
+  dRow(d.body,'Direction',dirChip);
+  const dirSel=dSelect([{v:'1,0',label:'Horizontal'},{v:'0,1',label:'Vertical'},
+                        {v:'-1,0',label:'Horizontal (reversed)'},{v:'0,-1',label:'Vertical (reversed)'}],
+    '1,0',v=>{st.dir=v.split(',').map(Number);st.dirLabel=v;dirChip.setCount(0);paint();});
+  dRow(d.body,'',dirSel);
+  dRow(d.body,'Distance Type',dSelect([{v:'extent',label:'Extent'},{v:'spacing',label:'Spacing'}],st.distType,v=>{st.distType=v;paint();}));
+  dRow(d.body,'Quantity',dInput(String(st.qty),v=>{const n=parseInt(v);if(n>=1&&n<=200){st.qty=n;paint();}}));
+  dRow(d.body,'Distance',dInput(fmtLen(st.dist),v=>{const n=parseLen(v);if(n!=null){st.dist=n;paint();}}));
+  dRow(d.body,'Suppress',dChip('Select',()=>toast('Suppressing single instances is a full-Fusion feature.','info'),()=>{}));
+  const hint=el('div','dlg-hint');d.body.appendChild(hint);
+  // picking a direction line, and live selection counts, both come through the canvas
+  renderSelection=function(){prevSelRender.apply(this,arguments);
+    if(App.skPatDirArm){
+      const s0=selectedEnts();
+      const ln=s0.find(e=>e.t==='line');
+      if(ln){
+        const dx=ln.b[0]-ln.a[0],dy=ln.b[1]-ln.a[1],L=Math.hypot(dx,dy);
+        if(L>1e-6){st.dir=[dx/L,dy/L];st.dirLabel='selected line';
+          dirChip.arm(false);dirChip.setCount(1);App.skPatDirArm=false;
+          setPrompt('Direction set — check Quantity and Distance');}
+      }
+    }
+    paint();};
+  function paint(){
+    const s0=selectedEnts();
+    objChip.setCount(s0.length);
+    const q=Math.max(1,parseInt(st.qty)||1);
+    const step=(st.distType==='extent')?((st.dist||0)/Math.max(1,q-1)):(st.dist||0);
+    hint.innerHTML='Quantity includes the original. <b>'+(st.distType==='extent'?'Extent':'Spacing')+'</b>: '+
+      (st.distType==='extent'
+        ? fmtLen(st.dist)+' shared across '+q+' = '+fmtLen(step)+' between neighbours.'
+        : fmtLen(st.dist)+' between neighbours = '+fmtLen(step*(q-1))+' overall.');
+    pvClear();
+    if(!s0.length)return;
+    for(const t of sketchPatternOffsets()){
+      for(const en of s0){
+        const pts=sampleEnt(en,true).map(q2=>[q2[0]+st.dir[0]*t,q2[1]+st.dir[1]*t]);
+        if(pts.length>1)pvPtsLocal(pts,0xffd76a);
+      }
+    }
+  }
+  paint();
+  setPrompt('Rectangular Pattern — select the entities, then set quantity and distance');
+}
 function patternLinClick(p){
   const sk=App.activeSketch,sel=selectedEnts();
   if(!sel.length){toast('Select entities first (Select tool), then run Rectangular Pattern and click direction start + end','warn');return;}
@@ -3399,7 +3516,10 @@ class AxisManipulator{
 /* ---------- EXTRUDE ---------- */
 function cmdExtrude(editFeature){
   if(App.mode==='sketch'){finishSketch();}
-  const state=editFeature?deep(editFeature.params):{sketch:null,profiles:[],dist:10,dist2:0,dir:'one',taper:0,op:Doc.features.some(f=>!f.suppressed&&f.type!=='sketchNew'&&f.type!=='plane')?'join':'new',flip:false};
+  const state=editFeature?deep(editFeature.params):{sketch:null,profiles:[],dist:10,dist2:0,dir:'one',taper:0,op:Doc.features.some(f=>!f.suppressed&&f.type!=='sketchNew'&&f.type!=='plane')?'join':'new',flip:false,start:0,extent:'dist',target:''};
+  if(state.start===undefined)state.start=0;
+  if(!state.extent)state.extent='dist';
+  if(state.target===undefined)state.target='';
   refreshProfilePickMeshes();
   let previewMesh=null;
   const d=makeDialog({title:'EXTRUDE',icon:'extrude',
@@ -3417,12 +3537,18 @@ function cmdExtrude(editFeature){
   chip.arm(true);
   const dirSel=dSelect([{v:'one',label:'One Side'},{v:'two',label:'Two Sides'},{v:'symmetric',label:'Symmetric'}],state.dir,v=>{state.dir=v;row2.style.display=v==='two'?'':'none';refreshPreview();});
   dRow(d.body,'Direction',dirSel);
+  const startIn=dInput(fmtLen(state.start||0),v=>{const n=parseLen(v);if(n!=null){state.start=n;refreshPreview();}});
+  dRow(d.body,'Start Offset',startIn);
+  const extSel=dSelect([{v:'dist',label:'Distance'},{v:'all',label:'All'}],state.extent,v=>{
+    state.extent=v;distRow.style.display=v==='all'?'none':'';refreshPreview();});
+  dRow(d.body,'Extent Type',extSel);
   const distIn=dInput(fmtLen(state.dist),v=>{const n=parseLen(v);if(n!=null&&n!==0){
     if(n<0){state.flip=!state.flip;state.dist=Math.abs(n);distIn.value=fmtLen(state.dist);
       setTimeout(()=>{flipSeg.querySelectorAll('.seg').forEach(x=>x.classList.toggle('active',x.dataset.v===(state.flip?'yes':'no')));});}
     else state.dist=n;
     refreshPreview();}});
-  dRow(d.body,'Distance',distIn);
+  const distRow=dRow(d.body,'Distance',distIn).closest('.dlg-row');
+  distRow.style.display=state.extent==='all'?'none':'';
   const dist2In=dInput(fmtLen(state.dist2||0),v=>{const n=parseLen(v);if(n!=null){state.dist2=n;refreshPreview();}});
   const row2=dRow(d.body,'Distance 2',dist2In).closest('.dlg-row');
   row2.style.display=state.dir==='two'?'':'none';
@@ -3432,7 +3558,9 @@ function cmdExtrude(editFeature){
   dRow(d.body,'Flip',flipSeg);
   const opSeg=dSeg([{v:'join',label:'Join',icon:'opJoin'},{v:'cut',label:'Cut',icon:'opCut'},{v:'intersect',label:'Intersect',icon:'opIntersect'},{v:'new',label:'New Body',icon:'opNew'}],state.op,v=>{state.op=v;refreshPreview();});
   dRow(d.body,'Operation',opSeg);
-  d.body.appendChild(el('div','dlg-hint','Click shaded profiles in the canvas. Drag the blue arrow to set distance.'));
+  dRow(d.body,'Objects',dSelect([{v:'',label:'Auto — every body it touches'}].concat(
+    Bodies.map(b=>({v:b.key,label:b.meta.name}))),state.target||'',v=>{state.target=v;}));
+  d.body.appendChild(el('div','dlg-hint','Click shaded profiles in the canvas. Drag the blue arrow to set distance. <b>Objects</b> pins a Join or Cut to one body — the rack, not the clamp.'));
   App.command={filter:['profile'],
     onPick(h){
       const ud=h.obj?h.obj.userData:h;
@@ -3452,10 +3580,7 @@ function cmdExtrude(editFeature){
     try{
       const shapes=buildShapes(sk,state.profiles,null);
       if(!shapes.length)return null;
-      let z0=0,z1=state.dist;
-      if(state.dir==='symmetric'){z0=-state.dist/2;z1=state.dist/2;}
-      else if(state.dir==='two'){z0=-(state.dist2||0);z1=state.dist;}
-      else if(state.flip){z0=-state.dist;z1=0;}
+      const zr=extrudeZRange(state),z0=zr[0],z1=zr[1];
       const geoms=shapesToWorldGeom(shapes,z0,z1,THREE.MathUtils.degToRad(state.taper||0),{});
       const M=planeMatrix(sk.plane);
       const merged=geomsUnion(geoms.map(g=>bakeMatrix(g,M)));
@@ -4156,10 +4281,11 @@ const COMMANDS=[
   {id:'redo',label:'Redo',key:'Ctrl+Y',icon:'redo',desc:'Redo the last undone action.',run:()=>{doRedo();}},
   {id:'save',label:'Save',key:'Ctrl+S',icon:'save',desc:'Save the design in this browser session.',run:()=>saveDesign()},
   {id:'deleteSel',label:'Delete',key:'Del',icon:'trash',desc:'Delete the selected bodies or sketch entities.',run:deleteSelection},
-  {id:'patternRect',label:'Rectangular Pattern',icon:'patternRect',desc:'Repeat a body in rows and columns (parametric).',run:()=>cmdPatternRect()},
+  {id:'patternRect',label:'Rectangular Pattern',icon:'patternRect',desc:'Repeat features or bodies along one or two directions (parametric).',run:()=>cmdPatternRectFusion()},
   {id:'patternCirc',label:'Circular Pattern',icon:'patternCirc',desc:'Repeat a body around the vertical axis (parametric).',run:()=>cmdPatternCirc()},
   {id:'importMesh',label:'Insert Mesh (STL / OBJ)',icon:'insertMesh',desc:'Import an STL or OBJ file as a mesh body.',run:importMeshFile},
   {id:'exportSTL',label:'Export STL',icon:'exportArr',desc:'Mesh of all visible bodies for slicing or Fusion 360.',run:()=>exportMesh('stl')},
+  {id:'exportBodySTL',label:'Export STL — one file per body',icon:'exportArr',desc:'Separate STL for each selected body (all visible bodies if none selected). Five parts, five files.',run:()=>exportBodiesSeparately('stl')},
   {id:'exportOBJ',label:'Export OBJ',icon:'exportArr',desc:'Welded OBJ mesh of all visible bodies.',run:()=>exportMesh('obj')},
   {id:'export3MF',label:'Export 3MF',icon:'exportArr',desc:'3MF package (zipped) for Windows 3D and slicers.',run:()=>exportMesh('3mf')},
   {id:'showAll',label:'Show All Bodies',icon:'eye',desc:'Unhide every body and clear isolation.',run:showAllBodies},
@@ -4178,7 +4304,7 @@ const COMMANDS=[
   {id:'skOffset',label:'Offset',key:'O',icon:'offsetTool',sketch:true,desc:'Copy a loop at a distance.',run:()=>setSketchTool('offset')},
   {id:'skMirror',label:'Mirror',icon:'mirror',sketch:true,desc:'Select entities, then click the mirror line.',run:()=>setSketchTool('mirror')},
   {id:'skPatternCirc',label:'Circular Pattern',icon:'patternCirc',sketch:true,desc:'Copy selected sketch entities around a centre \u2014 gear teeth, flutes, bolt circles.',run:()=>setSketchTool('patcirc')},
-  {id:'skPatternLin',label:'Rectangular Pattern',icon:'patternRect',sketch:true,desc:'Copy selected sketch entities along a direction \u2014 rack teeth, serrations.',run:()=>setSketchTool('patlin')},
+  {id:'skPatternLin',label:'Rectangular Pattern',icon:'patternRect',sketch:true,desc:'Copy selected sketch entities along a direction \u2014 rack teeth, serrations.',run:()=>cmdSketchPatternRect()},
   {id:'skText',label:'Text',icon:'textIc',sketch:true,desc:'Place block-letter text as sketch profiles \u2014 extrude to emboss or cut to engrave your name.',run:()=>setSketchTool('text')},
   {id:'skFillet',label:'Sketch Fillet',icon:'sketchFillet',sketch:true,desc:'Round the corner between two lines.',run:()=>setSketchTool('sfillet')},
   {id:'skConstruction',label:'Construction',key:'X',icon:'axisIc',sketch:true,desc:'Toggle construction geometry for new entities.',run:()=>{App.consMode=!App.consMode;const c=$('#sp-cons');if(c)c.classList.toggle('on',App.consMode);toast('Construction '+(App.consMode?'on':'off'));}},
@@ -4373,6 +4499,7 @@ const TAB_BUILDERS={
       b.addEventListener('click',fpSaveToDisk);return b;})()],()=>[
       {label:'Save Mesh to Disk…',icon:'save',run:fpSaveToDisk},
       {label:'Export STL',icon:'exportArr',run:()=>exportMesh('stl')},
+      {label:'Export STL — one file per body',icon:'exportArr',run:()=>exportBodiesSeparately('stl')},
       {label:'Export OBJ',icon:'exportArr',run:()=>exportMesh('obj')},
       {label:'Export 3MF',icon:'exportArr',run:()=>exportMesh('3mf')},
     ]));
@@ -4639,6 +4766,7 @@ function editFeature(f){
   switch(f.type){
     case 'sketchNew':{const sk=findSketch(f.params.sketch);if(sk)enterSketchMode(sk);break;}
     case 'extrude':cmdExtrude(f);break;
+    case 'patternFeat':cmdPatternRectFusion(f);break;
     case 'revolve':cmdRevolve(f);break;
     case 'fillet':case 'chamfer':cmdEditFillet(f);break;
     case 'shell':{const d=makeDialog({title:'EDIT SHELL',icon:'shellIc',onOK(){pushUndo();recompute();return true;}});
@@ -5190,7 +5318,7 @@ addEventListener('keydown',e=>{
       if(t&&t.close)t.close();else if(t&&t.finish)t.finish();return;}
     if(k==='e'){runCmd('extrude');return;}
   }else{
-    const map={e:'extrude',q:'presspull',f:'fillet',m:'move',a:'appearance'};
+    const map={e:'extrude',q:'presspull',f:'fillet',m:'move',a:'appearance',j:'joint'};
     if(map[k]){runCmd(map[k]);return;}
   }
 });
@@ -5328,6 +5456,26 @@ function downloadBytes(name,bytes,mime){
   const a=el('a',{href:URL.createObjectURL(b),download:name});
   document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},400);
+}
+function fpTrisOf(body){
+  const tris=[],a=body.geom.attributes.position.array;
+  for(let i=0;i<a.length;i+=9)tris.push([a[i],a[i+1],a[i+2],a[i+3],a[i+4],a[i+5],a[i+6],a[i+7],a[i+8]]);
+  return tris;
+}
+function exportBodiesSeparately(ext){ // one file per body — five STLs, not one welded lump
+  const keys=[...new Set(App.selection.filter(s=>s.kind==='face').map(s=>s.body.key))];
+  let bodies=keys.map(k=>bodyByKey(k)).filter(Boolean);
+  if(!bodies.length)bodies=Bodies.filter(b=>b.meta.visible);
+  if(!bodies.length){toast('No bodies to export','warn');return;}
+  const base=Doc.name.replace(/\s+/g,'_');
+  bodies.forEach((b,i)=>{
+    const tris=fpTrisOf(b);
+    if(!tris.length)return;
+    const {data,mime}=fpBuildByExt(ext,tris);
+    const nm=(b.meta.name||('Body'+(i+1))).replace(/[^A-Za-z0-9._-]+/g,'_');
+    setTimeout(()=>downloadBytes(base+'_'+nm+'.'+ext,data,mime),i*250);
+  });
+  toast(bodies.length+' separate '+ext.toUpperCase()+' file'+(bodies.length>1?'s':'')+' — one per body');
 }
 function exportMesh(ext){
   const tris=fpCollectTris();
@@ -5480,6 +5628,232 @@ function pickTargetBody(cb){ // selection first, else single body, else chip-arm
   toast('Click the body to pattern','info');
   App.command={filter:['body'],onPick(h){if(h.kind!=='face')return;App.command=null;cb(h.body);}};
 }
+/* ---------- RECTANGULAR PATTERN — the real Fusion dialog ----------
+   Field order, labels and defaults follow Fusion 360: Type, Objects,
+   Direction Type, Direction, Distance Type, Quantity, Distance (and a
+   second direction inferred perpendicular). Distance Type defaults to
+   EXTENT, which is the trap Lab 12A warns about: Quantity 6 with Extent
+   6.28 crams all six teeth into 6.28 mm. Spacing is the gap between
+   neighbours, which is what a pitch actually is. */
+function patternStepList(pr){                 // instance offsets along one direction
+  const q=Math.max(1,parseInt(pr.qty)||1);
+  const step=(pr.distType==='extent')?((pr.dist||0)/Math.max(1,q-1)):(pr.dist||0);
+  const out=[];
+  if(pr.dirType==='symmetric'){
+    for(let k=0;k<q;k++)out.push((k-(q-1)/2)*step);
+    let bi=0;for(let i=1;i<out.length;i++)if(Math.abs(out[i])<Math.abs(out[bi]))bi=i;
+    out.splice(bi,1);                          // the original already sits here
+  }else{
+    for(let k=1;k<q;k++)out.push(k*step);
+  }
+  return out;
+}
+function patternOffsets(pr){                  // full 2-direction grid, minus the original
+  const d1=new THREE.Vector3().fromArray(pr.dir||[0,0,1]);
+  if(d1.lengthSq()<1e-9)d1.set(0,0,1);
+  d1.normalize();
+  const up=Math.abs(d1.z)>0.9?new THREE.Vector3(1,0,0):new THREE.Vector3(0,0,1);
+  const d2=new THREE.Vector3().crossVectors(d1,up).normalize();   // Fusion infers direction 2
+  const a=[0].concat(patternStepList(pr));
+  const b=[0].concat(patternStepList({qty:pr.qty2,dist:pr.dist2,distType:pr.distType,dirType:pr.dirType}));
+  const out=[];
+  for(const t1 of a)for(const t2 of b){
+    if(Math.abs(t1)<1e-9&&Math.abs(t2)<1e-9)continue;
+    out.push(d1.clone().multiplyScalar(t1).add(d2.clone().multiplyScalar(t2)));
+  }
+  return out;
+}
+FeatureExec.patternFeat=function(f,mods){
+  const pr=f.params;
+  const offs=patternOffsets(pr);
+  if(!offs.length)return;
+  if(pr.objType==='bodies'){
+    const src=bodyByKey(pr.target);if(!src)throw'Source body missing';
+    offs.forEach((o,i)=>{
+      const g=src.geom.clone();g.translate(o.x,o.y,o.z);
+      const key=f.id+'_'+i;
+      if(!Doc.bodyMeta[key])Doc.bodyMeta[key]={name:src.meta.name+' ('+(i+2)+')',color:src.meta.color,visible:true,shiny:src.meta.shiny};
+      else{Doc.bodyMeta[key].color=src.meta.color;Doc.bodyMeta[key].shiny=src.meta.shiny;}
+      makeBody(key,g,null);
+    });
+    return;
+  }
+  const src=Doc.features.find(x=>x.id===pr.src);
+  if(!src)throw'Source feature missing';
+  if(src.type!=='extrude')throw'Only extrude features can be patterned';
+  if(src.suppressed)return;
+  const si=Doc.features.indexOf(src), pi=Doc.features.indexOf(f);
+  if(si>pi)throw'The pattern sits before the feature it copies — drag it later in the timeline';
+  const op=(src.params.op==='new')?'join':src.params.op;
+  offs.forEach((o,i)=>{
+    const g=extrudeToolGeometry(src,mods);
+    g.translate(o.x,o.y,o.z);
+    applyBooleanOp({id:f.id+'_'+i,params:src.params},g,op);
+  });
+};
+function patternPreviewGeoms(pr,mods){        // ghost copies while the dialog is open
+  const out=[];
+  try{
+    const offs=patternOffsets(pr);
+    if(pr.objType==='bodies'){
+      const src=bodyByKey(pr.target);if(!src)return out;
+      offs.forEach(o=>{const g=src.geom.clone();g.translate(o.x,o.y,o.z);out.push(g);});
+    }else{
+      const src=Doc.features.find(x=>x.id===pr.src);
+      if(!src||src.type!=='extrude')return out;
+      offs.forEach(o=>{const g=extrudeToolGeometry(src,mods||{});g.translate(o.x,o.y,o.z);out.push(g);});
+    }
+  }catch(e){}
+  return out;
+}
+function entWorldDir(sk,en){                  // a sketch line's direction, in world
+  if(!en||en.t!=='line')return null;
+  const b=sketchPlaneBasis(sk.plane);
+  const dx=en.b[0]-en.a[0],dy=en.b[1]-en.a[1];
+  const v=b.xAxis.clone().multiplyScalar(dx).add(b.yAxis.clone().multiplyScalar(dy));
+  return v.lengthSq()<1e-9?null:v.normalize();
+}
+function cmdPatternFeat(editFeature){ return cmdPatternRectFusion(editFeature); }
+function cmdPatternRectFusion(editFeature){
+  const exs=()=>Doc.features.filter(x=>x.type==='extrude'&&!x.suppressed);
+  const st=editFeature?deep(editFeature.params):{
+    objType:(exs().length?'features':'bodies'),
+    src:(exs().length?exs()[exs().length-1].id:''),
+    target:(Bodies[0]?Bodies[0].key:''),
+    dir:[0,0,1],dirLabel:'Z axis',
+    dirType:'one',distType:'extent',      // Fusion's default is Extent
+    qty:2,dist:10,qty2:1,dist2:0,compute:'optimized'};
+  if(!st.dir)st.dir=[0,0,1];
+  if(!st.distType)st.distType='extent';
+  if(!st.dirType)st.dirType='one';
+  if(st.qty2===undefined){st.qty2=1;st.dist2=0;}
+  const d=makeDialog({title:'RECTANGULAR PATTERN',icon:'patternRect',
+    onOK(){
+      if(st.objType==='features'&&!st.src){toast('Select a feature to pattern','warn');return false;}
+      if(st.objType==='bodies'&&!bodyByKey(st.target)){toast('Select a body to pattern','warn');return false;}
+      const total=Math.max(1,parseInt(st.qty)||1)*Math.max(1,parseInt(st.qty2)||1);
+      if(total<2){toast('Quantity must make at least one copy','warn');return false;}
+      pushUndo();
+      if(editFeature)editFeature.params=deep(st);
+      else spliceFeature({id:uid(),type:'patternFeat',params:deep(st),name:'Rect Pattern'});
+      recompute();return true;
+    },
+    onClose(){clearGroup(previewGroup);App.command=null;}});
+
+  const typeSel=dSelect([
+    {v:'faces',label:'Faces'},{v:'features',label:'Features'},
+    {v:'bodies',label:'Bodies'},{v:'components',label:'Components'}],st.objType,v=>{
+      if(v==='faces'||v==='components'){
+        toast(v==='faces'?'Patterning faces is a full-Fusion feature — pattern the Feature instead.'
+                         :'Components are not modelled in Fusion Labs — pattern Bodies or Features.','info');
+        typeSel.value=st.objType;return;}
+      st.objType=v;syncRows();preview();});
+  dRow(d.body,'Type',typeSel);
+
+  // Objects — a real selection chip: click a timeline chip, or a body in the canvas
+  const objChip=dChip('Select',()=>armObjects(),()=>{st.src='';st.target='';objChip.setCount(0);preview();});
+  const objRow=dRow(d.body,'Objects',objChip).closest('.dlg-row');
+  const objName=el('div','dlg-hint');d.body.appendChild(objName);
+
+  const dirTypeSel=dSelect([{v:'one',label:'One Direction'},{v:'symmetric',label:'Symmetric'}],st.dirType,v=>{st.dirType=v;preview();});
+  dRow(d.body,'Direction Type',dirTypeSel);
+
+  const dirChip=dChip('Select',()=>armDirection(),()=>{st.dir=[0,0,1];st.dirLabel='Z axis';dirChip.setCount(0);paintDir();preview();});
+  dRow(d.body,'Direction',dirChip);
+  const dirFallback=dSelect([
+    {v:'0,0,1',label:'Z axis'},{v:'1,0,0',label:'X axis'},{v:'0,1,0',label:'Y axis'},
+    {v:'0,0,-1',label:'−Z axis'},{v:'-1,0,0',label:'−X axis'},{v:'0,-1,0',label:'−Y axis'}],
+    (st.dir||[0,0,1]).join(','),v=>{st.dir=v.split(',').map(Number);st.dirLabel=v;dirChip.setCount(0);preview();});
+  dRow(d.body,'',dirFallback);
+
+  const distTypeSel=dSelect([{v:'extent',label:'Extent'},{v:'spacing',label:'Spacing'}],st.distType,v=>{st.distType=v;preview();paintHint();});
+  dRow(d.body,'Distance Type',distTypeSel);
+  dRow(d.body,'Quantity',dInput(String(st.qty),v=>{const n=parseInt(v);if(n>=1&&n<=200){st.qty=n;preview();paintHint();}}));
+  dRow(d.body,'Distance',dInput(fmtLen(st.dist),v=>{const n=parseLen(v);if(n!=null){st.dist=n;preview();paintHint();}}));
+  dRow(d.body,'Quantity 2',dInput(String(st.qty2),v=>{const n=parseInt(v);if(n>=1&&n<=200){st.qty2=n;preview();}}));
+  dRow(d.body,'Distance 2',dInput(fmtLen(st.dist2),v=>{const n=parseLen(v);if(n!=null){st.dist2=n;preview();}}));
+  dRow(d.body,'Suppress',dChip('Select',()=>toast('Suppressing single instances is a full-Fusion feature.','info'),()=>{}));
+  dRow(d.body,'Compute Option',dSelect([
+    {v:'optimized',label:'Optimized'},{v:'identical',label:'Identical'},{v:'adjust',label:'Adjust'}],st.compute,v=>{
+      st.compute=v;
+      if(v!=='optimized')toast('Compute Option is shown for authenticity — Fusion Labs always computes optimized.','info');}));
+  const hint=el('div','dlg-hint');d.body.appendChild(hint);
+
+  function paintHint(){
+    const q=Math.max(1,parseInt(st.qty)||1);
+    const step=(st.distType==='extent')?((st.dist||0)/Math.max(1,q-1)):(st.dist||0);
+    hint.innerHTML='Quantity includes the original. <b>'+(st.distType==='extent'?'Extent':'Spacing')+'</b>: '+
+      (st.distType==='extent'
+        ? fmtLen(st.dist)+' shared across '+q+' instances = '+fmtLen(step)+' between neighbours.'
+        : fmtLen(st.dist)+' between neighbours = '+fmtLen(step*(q-1))+' overall.');
+  }
+  function paintDir(){dirFallback.value=(st.dir||[0,0,1]).map(n=>+n.toFixed(6)).join(',');}
+  function syncRows(){
+    objChip.setCount(st.objType==='features'?(st.src?1:0):(st.target?1:0));
+    paintObjName();
+  }
+  function paintObjName(){
+    if(st.objType==='features'){
+      const f=Doc.features.find(x=>x.id===st.src);
+      objName.innerHTML=f?('Patterning feature <b>'+(f.name||'Extrude')+'</b> — the operation repeats, so the copies stay one solid.')
+                         :'Click a feature in the timeline, or pick one below.';
+    }else{
+      const b=bodyByKey(st.target);
+      objName.innerHTML=b?('Patterning body <b>'+b.meta.name+'</b> — copies arrive as separate bodies.')
+                         :'Click a body in the canvas.';
+    }
+  }
+  function armObjects(){
+    objChip.arm(true);
+    if(st.objType==='features'){
+      setPrompt('Click a <b>feature</b> in the timeline to pattern it');
+      const strip=$('#tl-strip');
+      const onChip=ev=>{
+        const c=ev.target.closest('.tl-chip');if(!c)return;
+        const idx=parseInt(c.dataset.idx);const f=Doc.features[idx];
+        if(!f||f.type!=='extrude'){toast('Only extrude features can be patterned here','warn');return;}
+        ev.stopPropagation();ev.preventDefault();
+        st.src=f.id;objChip.arm(false);objChip.setCount(1);paintObjName();preview();
+        strip.removeEventListener('click',onChip,true);
+      };
+      strip.addEventListener('click',onChip,true);
+      setTimeout(()=>strip.removeEventListener('click',onChip,true),20000);
+    }else{
+      setPrompt('Click the <b>body</b> to pattern');
+      App.command={filter:['body'],onPick(h){
+        if(h.kind!=='face')return;
+        st.target=h.body.key;objChip.arm(false);objChip.setCount(1);paintObjName();preview();App.command=null;}};
+    }
+  }
+  function armDirection(){
+    dirChip.arm(true);
+    setPrompt('Click an <b>edge or sketch line</b> — the copies march along it');
+    App.command={filter:['sketch','body'],onPick(h){
+      let v=null;
+      if(h.kind==='sketchEnt'&&h.obj){
+        const ud=h.obj.userData,sk=findSketch(ud.sketch);
+        const en=sk&&sk.ents.find(x=>x.id===ud.entId);
+        v=entWorldDir(sk,en);
+        if(!v){toast('Pick a straight line — arcs and circles have no single direction','warn');return;}
+      }else if(h.kind==='face'&&h.normal){v=h.normal.clone().normalize();}
+      if(!v)return;
+      st.dir=[v.x,v.y,v.z];st.dirLabel='Selected edge';
+      dirChip.arm(false);dirChip.setCount(1);paintDir();preview();App.command=null;
+      setPrompt('Direction set — check Quantity and Distance');}};
+  }
+  function preview(){
+    clearGroup(previewGroup);
+    const geoms=patternPreviewGeoms(st,collectMods(Doc.marker));
+    geoms.forEach(g=>{
+      const m=new THREE.Mesh(g,new THREE.MeshPhongMaterial({color:0xf3c433,transparent:true,opacity:.45,depthWrite:false,side:THREE.DoubleSide}));
+      previewGroup.add(m);
+      const eg=new THREE.LineSegments(new THREE.EdgesGeometry(g,24),new THREE.LineBasicMaterial({color:0xf3c433,transparent:true,opacity:.8}));
+      previewGroup.add(eg);
+    });
+  }
+  syncRows();paintDir();paintHint();preview();
+  setPrompt('Rectangular Pattern — pick the objects, then the direction');
+}
 function cmdPatternRect(editFeature){
   const start=body=>{
     const state=editFeature?deep(editFeature.params):{target:body.key,qx:2,qy:1,dx:20,dy:20,axis1:[1,0,0],axis2:[0,1,0]};
@@ -5492,6 +5866,8 @@ function cmdPatternRect(editFeature){
         recompute();return true;
       }});
     d.body.appendChild(el('div','dlg-hint','Patterning “'+(bodyByKey(state.target)?bodyByKey(state.target).meta.name:state.target)+'” — quantity includes the original.'));
+    dRow(d.body,'Object Type',dSelect([{v:'bodies',label:'Bodies'},{v:'features',label:'Features'}],'bodies',v=>{
+      if(v==='features'){closeDialog(false);setTimeout(()=>cmdPatternRectFusion(),0);}}));
     dRow(d.body,'Quantity X',dInput(String(state.qx),v=>{const n=parseInt(v);if(n>=1&&n<=12)state.qx=n;}));
     dRow(d.body,'Distance X',dInput(fmtLen(state.dx),v=>{const n=parseLen(v);if(n!=null)state.dx=n;}));
     dRow(d.body,'Quantity Y',dInput(String(state.qy),v=>{const n=parseInt(v);if(n>=1&&n<=12)state.qy=n;}));
@@ -5523,7 +5899,22 @@ function cmdPatternCirc(editFeature){
 }
 /* ---------- dim HUD: type exact sizes while drawing ---------- */
 const dimhud=$('#dimhud');
-let dimHudApply=null;
+let dimHudApply=null,dimHudLocked=false;
+function dimHudInputs(){return[...dimhud.querySelectorAll('input')];}
+function dimHudFocus(inp,seed){
+  if(!inp)return;
+  inp.focus();
+  if(seed!==undefined)inp.value=seed;
+  inp.dataset.dirty='1';dimHudLocked=true;
+  const n=inp.value.length;try{inp.setSelectionRange(n,n);}catch(err){}
+}
+function dimHudCommit(){
+  if(!dimHudApply)return;
+  const fn=dimHudApply;
+  fn(readDimHud());
+  dimHudInputs().forEach(i=>{delete i.dataset.dirty;});
+  dimHudLocked=false;
+}
 function showDimHud(fields,apply){ // fields: [{label,val,suffix}]
   dimhud.innerHTML='';
   fields.forEach((f,i)=>{
@@ -5531,31 +5922,66 @@ function showDimHud(fields,apply){ // fields: [{label,val,suffix}]
     dimhud.appendChild(el('span','dh-x',f.label));
     const inp=el('input',{type:'text',spellcheck:'false'});
     inp.value=f.val;inp.dataset.i=i;
+    inp.addEventListener('input',()=>{inp.dataset.dirty='1';dimHudLocked=true;});
     inp.addEventListener('keydown',e=>{
       e.stopPropagation();
-      if(e.key==='Enter'&&dimHudApply)dimHudApply(readDimHud());
-      if(e.key==='Escape'){hideDimHud();const t=SketchTools[App.sketchTool];if(t&&t.esc)t.esc();}
+      if(e.key==='Enter'){e.preventDefault();dimHudCommit();return;}
+      if(e.key==='Escape'){hideDimHud();const t=SketchTools[App.sketchTool];if(t&&t.esc)t.esc();return;}
       if(e.key==='Tab'){e.preventDefault();
-        const inputs=[...dimhud.querySelectorAll('input')];
-        const next=inputs[(inputs.indexOf(inp)+1)%inputs.length];next.focus();next.select();}
+        inp.dataset.dirty='1';dimHudLocked=true;
+        const inputs=dimHudInputs();
+        const next=inputs[(inputs.indexOf(inp)+1)%inputs.length];
+        dimHudFocus(next);next.select();}
     });
     inp.addEventListener('pointerdown',e=>e.stopPropagation());
     dimhud.appendChild(inp);
   });
   dimhud.appendChild(el('span','dh-x','mm · Enter'));
   dimhud.classList.add('show');
-  dimHudApply=apply;
+  dimHudApply=apply;dimHudLocked=false;
 }
-function readDimHud(){return[...dimhud.querySelectorAll('input')].map(i=>parseLen(i.value));}
+function readDimHud(){return dimHudInputs().map(i=>parseLen(i.value));}
 function syncDimHud(e,vals){
   if(!dimhud.classList.contains('show'))return;
-  const r=viewport.getBoundingClientRect();
-  dimhud.style.left=Math.min(e.clientX-r.left+20,r.width-dimhud.offsetWidth-10)+'px';
-  dimhud.style.top=Math.min(e.clientY-r.top+16,r.height-40)+'px';
-  const inputs=dimhud.querySelectorAll('input');
-  inputs.forEach((inp,i)=>{if(document.activeElement!==inp&&vals[i]!==undefined)inp.value=fmtNum(vals[i]);});
+  if(!dimHudLocked&&e){ // once you start typing the box stops chasing the cursor
+    const r=viewport.getBoundingClientRect();
+    dimhud.style.left=Math.min(e.clientX-r.left+20,r.width-dimhud.offsetWidth-10)+'px';
+    dimhud.style.top=Math.min(e.clientY-r.top+16,r.height-40)+'px';
+  }
+  dimHudInputs().forEach((inp,i)=>{
+    if(inp.dataset.dirty)return;              // never overwrite what the student typed
+    if(document.activeElement===inp)return;
+    if(vals[i]!==undefined&&vals[i]!==null&&isFinite(vals[i]))inp.value=fmtNum(vals[i]);
+  });
 }
-function hideDimHud(){dimhud.classList.remove('show');dimHudApply=null;}
+function hideDimHud(){dimhud.classList.remove('show');dimHudApply=null;dimHudLocked=false;}
+/* Type-to-fill, exactly like Fusion: start typing a number while drawing and it
+   lands in the first field. Without this the HUD is unreachable — it follows the
+   cursor, so it can never be clicked. */
+addEventListener('keydown',e=>{
+  if(!dimhud.classList.contains('show'))return;
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  const ae=document.activeElement;
+  if(ae&&dimhud.contains(ae))return;
+  if(ae&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName))return;
+  if(e.key==='Enter'){e.preventDefault();e.stopPropagation();dimHudCommit();return;}
+  if(e.key==='Tab'){e.preventDefault();e.stopPropagation();
+    const first=dimHudInputs()[0];dimHudFocus(first);if(first)first.select();return;}
+  if(!/^[0-9.\-]$/.test(e.key))return;
+  e.preventDefault();e.stopPropagation();
+  dimHudFocus(dimHudInputs()[0],e.key);
+},true);
+/* Absolute X / Y entry for the first click of a tool — lab sheets give coordinate
+   tables (ring 1 at -16.00, -6.49), which 1 mm grid snapping can never hit. */
+function showXYHud(p,e){
+  if(!dimhud.classList.contains('show'))showDimHud([{label:'X',val:''},{label:'Y',val:''}],vals=>{
+    const x=vals[0],y=vals[1];
+    if(x==null||y==null||!isFinite(x)||!isFinite(y))return;
+    const t=SketchTools[App.sketchTool];
+    if(t&&t.click){pushUndoOnce();t.click([x,y]);}
+  });
+  if(e)syncDimHud(e,[p[0],p[1]]);
+}
 /* ---------- coords readout ---------- */
 function updateCoords(p){
   const c=$('#coords');
@@ -6264,5 +6690,558 @@ viewMM=function(x,y){
 })();
 </script>
 
+
+<script>
+/* ============================================================
+   SECTION 13 — THE SPUR GEAR ADD-IN, JOINTS & MOTION LINK
+   UTILITIES ▸ ADD-INS ▸ Scripts and Add-Ins ▸ SpurGear runs the
+   same involute maths as Autodesk's sample script: module,
+   pressure angle, backlash and root fillet, addendum 1×m and
+   dedendum 1.25×m — so module 2 × 10 teeth gives pitch Ø20,
+   tips Ø24 and roots Ø15, exactly the numbers Lab 12A defends.
+   ASSEMBLE ▸ Joint / Drive Joints / Motion Link then make it
+   move: 360° of pinion = one pitch circumference of rack.
+   ============================================================ */
+(function(){
+if(!Doc.joints)Doc.joints=[];
+if(!Doc.motionLinks)Doc.motionLinks=[];
+const jointList=()=>(Doc.joints||(Doc.joints=[]));
+const linkList=()=>(Doc.motionLinks||(Doc.motionLinks=[]));
+const jointById=id=>jointList().find(j=>j.id===id);
+
+/* ---------------------------------------------------------------- GEAR MATHS */
+function involuteAngle(rb,r){            // polar roll angle of the involute at radius r
+  if(r<=rb)return 0;
+  const a=Math.acos(Math.min(1,rb/r));
+  return Math.tan(a)-a;
+}
+function spurGearProfile(p){
+  const m=p.module, z=Math.max(4,Math.round(p.teeth));
+  const pa=THREE.MathUtils.degToRad(p.pressureAngle||20);
+  const rp=m*z/2;                        // pitch circle — the contract
+  const rb=rp*Math.cos(pa);              // base circle, where the involute starts
+  const ra=rp+m;                         // addendum: tips one module above the pitch line
+  const rf=Math.max(0.4,rp-1.25*m);      // dedendum 1.25×m — root is the strongest part
+  const halfPitch=Math.PI/(2*z)-((p.backlash||0)/2)/rp;
+  const invP=involuteAngle(rb,rp);
+  const half=r=>halfPitch+invP-involuteAngle(rb,r);
+  const rStart=Math.max(rb,rf)+1e-6;
+  const N=15;                            // same involute point count as the add-in
+  const pol=(r,t)=>[r*Math.cos(t),r*Math.sin(t)];
+  // one tooth, drawn from the root up one flank, across the tip, down the other
+  const flank=[];
+  for(let i=0;i<=N;i++){const r=rStart+(ra-rStart)*(i/N);flank.push([r,half(r)]);}
+  const tipHalf=half(ra);
+  const tooth=[];
+  const fil=Math.max(0,Math.min(p.rootFillet||0,(rStart-rf)>0.05?(rStart-rf)*0.9:0.4*m));
+  const cornerA=-half(rStart), cornerB=half(rStart);
+  function rootFilletPts(theta,sign){     // tangent arc between the root circle and the flank
+    if(fil<=1e-4)return [pol(rf,theta)];
+    const d=rf+fil, D=Math.asin(Math.min(1,fil/d));
+    const oc=[d*Math.cos(theta+sign*D),d*Math.sin(theta+sign*D)];
+    const pLine=pol(d*Math.cos(D),theta);          // tangent point on the flank/radial line
+    const pRoot=pol(rf,theta+sign*D);              // tangent point on the root circle
+    const a0=Math.atan2(pRoot[1]-oc[1],pRoot[0]-oc[0]);
+    const a1=Math.atan2(pLine[1]-oc[1],pLine[0]-oc[0]);
+    let da=a1-a0;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
+    const out=[];
+    for(let i=0;i<=6;i++){const a=a0+da*(i/6);out.push([oc[0]+fil*Math.cos(a),oc[1]+fil*Math.sin(a)]);}
+    return out;
+  }
+  // traversed anticlockwise: root circle -> fillet -> up the flank -> tip -> down -> fillet -> root
+  if(rStart>rf+1e-4)tooth.push(...rootFilletPts(cornerA,-1));
+  else tooth.push(pol(rf,cornerA));
+  flank.forEach(f=>tooth.push(pol(f[0],-f[1])));
+  if(tipHalf>1e-4){                       // flat-ish tip arc
+    for(let i=1;i<6;i++)tooth.push(pol(ra,-tipHalf+2*tipHalf*(i/6)));
+  }
+  flank.slice().reverse().forEach(f=>tooth.push(pol(f[0],f[1])));
+  if(rStart>rf+1e-4)tooth.push(...rootFilletPts(cornerB,1).reverse());
+  else tooth.push(pol(rf,cornerB));
+  // Wrap the tooth around the circle, joining neighbours with a root arc. The join angles are
+  // kept unwrapped — mixing them with atan2 output sends the arc the long way round past 180°,
+  // which spirals the profile and makes the triangulation fold over itself.
+  const pts=[],step=2*Math.PI/z;
+  const angOf=q=>Math.atan2(q[1],q[0]);
+  const tEnd=angOf(tooth[tooth.length-1]), tStart=angOf(tooth[0]);
+  for(let k=0;k<z;k++){
+    const rot=k*step;
+    tooth.forEach(q=>{
+      pts.push([q[0]*Math.cos(rot)-q[1]*Math.sin(rot), q[0]*Math.sin(rot)+q[1]*Math.cos(rot)]);
+    });
+    const a0=tEnd+rot, a1=tStart+rot+step, da=a1-a0;
+    for(let i=1;i<5;i++)pts.push([rf*Math.cos(a0+da*i/5),rf*Math.sin(a0+da*i/5)]);
+  }
+  return {pts,rp,rb,ra,rf};
+}
+function spurGearGeom(pr){
+  const prof=spurGearProfile(pr);
+  const cx=pr.cx||0, cy=pr.cy||0;
+  const shape=new THREE.Shape(prof.pts.map(q=>new THREE.Vector2(q[0]+cx,q[1]+cy)));
+  if((pr.holeDiam||0)>0.05){
+    const h=new THREE.Path();
+    h.absarc(cx,cy,pr.holeDiam/2,0,Math.PI*2,true);
+    shape.holes.push(h);
+  }
+  let z0=0,z1=pr.thickness;
+  if(pr.dir==='symmetric'){z0=-pr.thickness/2;z1=pr.thickness/2;}
+  z0+=(pr.start||0);z1+=(pr.start||0);
+  let g=new THREE.ExtrudeGeometry(shape,{depth:z1-z0,bevelEnabled:false,curveSegments:24});
+  g.translate(0,0,z0);
+  if(g.index)g=g.toNonIndexed();
+  g=bakeMatrix(g,planeMatrix({type:'origin',which:pr.plane||'XY'}));
+  if(g.index)g=g.toNonIndexed();
+  ensureOutward(g);
+  return g;
+}
+FeatureExec.spurGear=function(f){ applyBooleanOp(f,spurGearGeom(f.params)); };
+
+/* -------------------------------------------------------- THE ADD-IN DIALOG */
+function cmdSpurGear(editFeature){
+  const st=editFeature?deep(editFeature.params):{
+    standard:'metric',pressureAngle:20,module:2,teeth:10,backlash:0,rootFillet:0.3,
+    thickness:10,holeDiam:6.3,plane:'XY',cx:0,cy:0,dir:'one',start:0,
+    op:Bodies.length?'new':'new'};
+  let err=null;
+  const d=makeDialog({title:'Spur Gear',icon:'patternCirc',x:innerWidth-360,y:100,
+    onOK(){
+      if(validate()){toast(err,'warn');return false;}
+      pushUndo();
+      if(editFeature)editFeature.params=deep(st);
+      else spliceFeature({id:uid(),type:'spurGear',params:deep(st),name:'Spur Gear'});
+      recompute();
+      toast('Spur gear — '+st.teeth+' teeth, module '+fmtNum(st.module)+', pitch Ø'+fmtNum(st.module*st.teeth));
+      return true;
+    }});
+  const errEl=el('div','dlg-hint');
+  errEl.style.cssText='color:#e05a4e;font-weight:600;display:none';
+  d.body.appendChild(errEl);
+  function validate(){
+    err=null;
+    if(!(st.module>0.05))err='Module must be greater than zero.';
+    else if(!(st.teeth>=4))err='The number of teeth must be 4 or more.';
+    else if(st.holeDiam>=(st.module*st.teeth-2.5*st.module))err='The hole is larger than the root circle.';
+    else if(!(st.thickness>0))err='Gear thickness must be greater than zero.';
+    errEl.style.display=err?'':'none';errEl.textContent=err||'';
+    return err;
+  }
+  const pitchOut=el('div','dr-label');
+  pitchOut.style.cssText='color:var(--f-blue);font-weight:600';
+  function refresh(){
+    validate();
+    const pd=st.module*st.teeth;
+    pitchOut.textContent='Ø'+fmtNum(pd)+'   (tips Ø'+fmtNum(pd+2*st.module)+' · roots Ø'+fmtNum(pd-2.5*st.module)+')';
+  }
+  dRow(d.body,'Standard',dSelect([{v:'metric',label:'Metric'},{v:'english',label:'English'}],st.standard,v=>{
+    st.standard=v;
+    if(v==='english')toast('English (diametral pitch) is not simulated — Fusion Labs works in module.','info');
+    st.standard='metric';refresh();}));
+  const paSel=dSelect([{v:'14.5',label:'14.5 deg'},{v:'20',label:'20 deg'},{v:'25',label:'25 deg'}],String(st.pressureAngle),v=>{
+    st.pressureAngle=parseFloat(v);refresh();});
+  dRow(d.body,'Pressure Angle',paSel);
+  dRow(d.body,'Module',dInput(fmtNum(st.module),v=>{const n=parseLen(v);if(n!=null){st.module=n;refresh();}}));
+  dRow(d.body,'Number of Teeth',dInput(String(st.teeth),v=>{const n=parseInt(v);if(n>0){st.teeth=n;refresh();}}));
+  dRow(d.body,'Backlash',dInput(fmtLen(st.backlash),v=>{const n=parseLen(v);if(n!=null){st.backlash=n;refresh();}}));
+  dRow(d.body,'Root Fillet Radius',dInput(fmtLen(st.rootFillet),v=>{const n=parseLen(v);if(n!=null){st.rootFillet=n;refresh();}}));
+  dRow(d.body,'Gear Thickness',dInput(fmtLen(st.thickness),v=>{const n=parseLen(v);if(n!=null){st.thickness=n;refresh();}}));
+  dRow(d.body,'Hole Diameter',dInput(fmtLen(st.holeDiam),v=>{const n=parseLen(v);if(n!=null){st.holeDiam=n;refresh();}}));
+  dRow(d.body,'Pitch Diameter',pitchOut);
+  d.body.appendChild(el('div','dlg-sep')).style.cssText='height:1px;background:var(--f-border-lt);margin:8px 2px';
+  dRow(d.body,'Plane',dSelect([{v:'XY',label:'XY (Top)'},{v:'XZ',label:'XZ (Front)'},{v:'YZ',label:'YZ (Right)'}],st.plane,v=>st.plane=v));
+  dRow(d.body,'Centre X',dInput(fmtLen(st.cx),v=>{const n=parseLen(v);if(n!=null)st.cx=n;}));
+  dRow(d.body,'Centre Y',dInput(fmtLen(st.cy),v=>{const n=parseLen(v);if(n!=null)st.cy=n;}));
+  dRow(d.body,'Direction',dSelect([{v:'one',label:'One Side'},{v:'symmetric',label:'Symmetric'}],st.dir,v=>st.dir=v));
+  dRow(d.body,'Start Offset',dInput(fmtLen(st.start),v=>{const n=parseLen(v);if(n!=null)st.start=n;}));
+  dRow(d.body,'Operation',dSeg([{v:'join',label:'Join',icon:'opJoin'},{v:'cut',label:'Cut',icon:'opCut'},{v:'new',label:'New Body',icon:'opNew'}],st.op,v=>st.op=v));
+  d.body.appendChild(el('div','dlg-hint','Involute teeth, generated the way the add-in does: addendum 1×module, dedendum 1.25×module. Match the module on both gears and the mesh takes care of itself.'));
+  refresh();
+  setPrompt('Spur Gear — set module and tooth count, then OK');
+}
+
+/* ------------------------------------------------ SCRIPTS AND ADD-INS DIALOG */
+const SAMPLE_SCRIPTS=[
+  {n:'AddInSample',t:'Add-In'},{n:'CylinderBuilder',t:'Script'},{n:'DrawSlot',t:'Script'},
+  {n:'FloorPlanSample',t:'Script'},{n:'ImportSplineCSV',t:'Script'},{n:'RaceCarWheel',t:'Script'},
+  {n:'SpurGear',t:'Script',live:true},{n:'Tombstone',t:'Script'},{n:'VoronoiSketchGenerator',t:'Script'},
+];
+function cmdAddIns(){
+  let sel='SpurGear',tab='scripts';
+  const d=makeDialog({title:'Scripts and Add-Ins',icon:'gear',x:innerWidth/2-210,y:120,
+    onOK(){run();return true;}});
+  d.ok.textContent='Run';
+  const tabs=el('div');tabs.style.cssText='display:flex;gap:2px;margin:-2px 0 8px 0';
+  const mkTab=(k,label)=>{const b=el('div','',label);
+    b.style.cssText='padding:5px 14px;font-size:12px;cursor:pointer;border-bottom:2px solid '+(tab===k?'var(--f-blue)':'transparent')+';color:'+(tab===k?'var(--f-text)':'var(--f-text-dim)');
+    b.addEventListener('click',()=>{tab=k;paint();});return b;};
+  d.body.appendChild(tabs);
+  const list=el('div');
+  list.style.cssText='height:210px;overflow:auto;border:1px solid var(--f-border-lt);border-radius:3px;background:var(--f-input);padding:4px 0';
+  d.body.appendChild(list);
+  const detail=el('div','dlg-hint');d.body.appendChild(detail);
+  function paint(){
+    tabs.innerHTML='';tabs.appendChild(mkTab('scripts','Scripts'));tabs.appendChild(mkTab('addins','Add-Ins'));
+    list.innerHTML='';
+    const head=el('div','',tab==='scripts'?'My Scripts':'My Add-Ins');
+    head.style.cssText='font-size:11px;color:var(--f-text-faint);padding:3px 10px';
+    list.appendChild(head);
+    const none=el('div','','(none)');
+    none.style.cssText='font-size:12px;color:var(--f-text-faint);padding:2px 22px';
+    list.appendChild(none);
+    const h2=el('div','',tab==='scripts'?'Sample Scripts':'Sample Add-Ins');
+    h2.style.cssText='font-size:11px;color:var(--f-text-faint);padding:6px 10px 3px';
+    list.appendChild(h2);
+    SAMPLE_SCRIPTS.filter(x=>tab==='scripts'?x.t==='Script':x.t==='Add-In').forEach(x=>{
+      const r=el('div','',IC(x.live?'patternCirc':'fileDoc','i16')+'<span style="margin-left:6px">'+x.n+'</span>');
+      r.style.cssText='display:flex;align-items:center;font-size:12px;padding:3px 22px;cursor:pointer;'+
+        (sel===x.n?'background:var(--f-blue);color:#fff':'color:var(--f-text)');
+      r.addEventListener('click',()=>{sel=x.n;paint();});
+      r.addEventListener('dblclick',()=>{sel=x.n;run();});
+      list.appendChild(r);
+    });
+    const s=SAMPLE_SCRIPTS.find(x=>x.n===sel);
+    detail.innerHTML=s&&s.live
+      ? '<b>SpurGear</b> — creates a spur gear from module, pressure angle and tooth count. This is the one sample wired up in Fusion Labs.'
+      : 'Sample scripts are listed for authenticity. <b>SpurGear</b> is the one that runs here.';
+  }
+  function run(){
+    const s=SAMPLE_SCRIPTS.find(x=>x.n===sel);
+    if(s&&s.live){closeDialog(false);setTimeout(()=>cmdSpurGear(),0);}
+    else toast('“'+sel+'” is listed for authenticity — only SpurGear runs in Fusion Labs','info');
+  }
+  paint();
+  setPrompt('Scripts and Add-Ins — pick SpurGear, then Run');
+}
+
+/* ------------------------------------------------------------------- JOINTS */
+function axisVec(a){return new THREE.Vector3(a==='x'?1:0,a==='y'?1:0,a==='z'?1:0);}
+function bodyCentre(b){const bb=bboxOf(b.geom);return bb.getCenter(new THREE.Vector3());}
+window.applyJointPoses=function(){
+  for(const b of Bodies){b.mesh.position.set(0,0,0);b.mesh.quaternion.identity();}
+  for(const j of jointList()){
+    const b=bodyByKey(j.comp1);if(!b)continue;
+    const ax=axisVec(j.axis).normalize();
+    if(j.type==='revolute'){
+      const o=new THREE.Vector3().fromArray(j.origin||[0,0,0]);
+      const q=new THREE.Quaternion().setFromAxisAngle(ax,THREE.MathUtils.degToRad(j.value||0));
+      b.mesh.quaternion.copy(q);
+      b.mesh.position.copy(o).sub(o.clone().applyQuaternion(q));
+    }else if(j.type==='slider'){
+      b.mesh.position.copy(ax.clone().multiplyScalar(j.value||0));
+    }
+  }
+};
+function driveJoint(j,val){
+  j.value=val;
+  for(const L of linkList()){
+    let mine=null,theirs=null,other=null;
+    if(L.j1===j.id){mine=L.v1;theirs=L.v2;other=jointById(L.j2);}
+    else if(L.j2===j.id){mine=L.v2;theirs=L.v1;other=jointById(L.j1);}
+    else continue;
+    if(!other||!mine)continue;
+    other.value=(val/mine)*theirs*(L.reverse?-1:1);
+  }
+  applyJointPoses();
+}
+window.driveJoint=driveJoint;
+const JOINT_TYPES=[
+  {v:'rigid',label:'Rigid'},{v:'revolute',label:'Revolute'},{v:'slider',label:'Slider'},
+  {v:'cylindrical',label:'Cylindrical'},{v:'pinslot',label:'Pin-Slot'},{v:'planar',label:'Planar'},{v:'ball',label:'Ball'},
+];
+function bodyOpts(extra){
+  const o=Bodies.map(b=>({v:b.key,label:b.meta.name}));
+  return extra?[{v:'',label:extra}].concat(o):o;
+}
+function cmdJoint(editJoint){
+  if(Bodies.length<1){toast('Create a body first','warn');return;}
+  const st=editJoint?Object.assign({},editJoint):{
+    id:uid(),name:'Joint'+(jointList().length+1),type:'revolute',
+    comp1:Bodies[0].key,comp2:'',axis:'z',origin:bodyCentre(Bodies[0]).toArray(),value:0,animate:false};
+  let anim=null;
+  const d=makeDialog({title:'Joint',icon:'joint',x:innerWidth-350,y:100,
+    onOK(){
+      if(st.type!=='revolute'&&st.type!=='slider'&&st.type!=='rigid'){
+        toast(JOINT_TYPES.find(t=>t.v===st.type).label+' joints are shown for authenticity — Fusion Labs drives Revolute and Slider.','info');
+        return false;}
+      if(!editJoint)jointList().push(st);
+      else Object.assign(editJoint,st);
+      applyJointPoses();buildBrowser();
+      toast(st.name+' — '+st.type+' joint created');
+      return true;
+    },
+    onClose(){if(anim){cancelAnimationFrame(anim);anim=null;}
+      const j=jointById(st.id);if(!j){/* cancelled */}applyJointPoses();}
+  });
+  const tabs=el('div');tabs.style.cssText='display:flex;gap:2px;margin:-2px 0 8px 0';
+  ['Position','Motion'].forEach((t,i)=>{const b=el('div','',t);
+    b.style.cssText='padding:5px 14px;font-size:12px;cursor:default;border-bottom:2px solid '+(i===1?'var(--f-blue)':'transparent')+';color:'+(i===1?'var(--f-text)':'var(--f-text-faint)');
+    tabs.appendChild(b);});
+  d.body.appendChild(tabs);
+  dRow(d.body,'Type',dSelect(JOINT_TYPES,st.type,v=>{st.type=v;syncRows();}));
+  dRow(d.body,'Component 1',dSelect(bodyOpts(),st.comp1,v=>{st.comp1=v;
+    const b=bodyByKey(v);if(b)st.origin=bodyCentre(b).toArray();paintOrigin();}));
+  dRow(d.body,'Component 2',dSelect(bodyOpts('Ground'),st.comp2,v=>st.comp2=v));
+  const axisRow=dRow(d.body,'Axis',dSelect([{v:'x',label:'X axis'},{v:'y',label:'Y axis'},{v:'z',label:'Z axis'}],st.axis,v=>{st.axis=v;preview();})).closest('.dlg-row');
+  const oi=[0,1,2].map(i=>dInput(fmtLen(st.origin[i]||0),v=>{const n=parseLen(v);if(n!=null){st.origin[i]=n;preview();}}));
+  const originRows=['Origin X','Origin Y','Origin Z'].map((lb,i)=>dRow(d.body,lb,oi[i]).closest('.dlg-row'));
+  function paintOrigin(){oi.forEach((inp,i)=>inp.value=fmtLen(st.origin[i]||0));preview();}
+  const animBox=el('input',{type:'checkbox'});
+  animBox.addEventListener('change',()=>{st.animate=animBox.checked;
+    if(st.animate)startAnim();else stopAnim();});
+  const animWrap=el('div');animWrap.style.cssText='display:flex;align-items:center;gap:6px';
+  animWrap.appendChild(animBox);animWrap.appendChild(el('span','','Preview the motion'));
+  dRow(d.body,'Animate',animWrap);
+  d.body.appendChild(el('div','dlg-hint','<b>Component 1</b> moves, <b>Component 2</b> holds still. A <b>Revolute</b> joint spins about the axis, a <b>Slider</b> runs along it. Tick Animate to watch the degree of freedom before you commit.'));
+  function syncRows(){
+    const dof=(st.type==='revolute'||st.type==='slider');
+    axisRow.style.display=dof?'':'none';
+    originRows.forEach(r=>r.style.display=(st.type==='revolute')?'':'none');
+  }
+  function preview(){
+    const j=jointById(st.id)||st;
+    const keep=jointList().includes(st);
+    if(!keep)jointList().push(st);
+    applyJointPoses();
+    if(!keep)jointList().pop();
+  }
+  let t0=0;
+  function startAnim(){
+    stopAnim();
+    const keep=jointList().includes(st);
+    if(!keep)jointList().push(st);
+    t0=performance.now();
+    const tick=()=>{
+      const t=(performance.now()-t0)/1000;
+      st.value=(st.type==='revolute')?Math.sin(t*1.4)*45:Math.sin(t*1.4)*10;
+      applyJointPoses();
+      anim=requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  function stopAnim(){
+    if(anim){cancelAnimationFrame(anim);anim=null;}
+    st.value=0;
+    const i=jointList().indexOf(st);
+    applyJointPoses();
+  }
+  syncRows();preview();
+  setPrompt('Joint — pick the moving component, the axis, and the motion type');
+}
+
+/* -------------------------------------------------------------- DRIVE JOINTS */
+function cmdDriveJoints(){
+  const js=jointList().filter(j=>j.type==='revolute'||j.type==='slider');
+  if(!js.length){toast('Create a Revolute or Slider joint first','warn');return;}
+  let cur=js[0],anim=null,dir=1;
+  const d=makeDialog({title:'Drive Joints',icon:'play',x:innerWidth-350,y:100,
+    onOK(){return true;},
+    onClose(){if(anim){cancelAnimationFrame(anim);anim=null;}}});
+  const rot=()=>cur.type==='revolute';
+  dRow(d.body,'Joint',dSelect(js.map(j=>({v:j.id,label:j.name+'  ('+j.type+')'})),cur.id,v=>{
+    cur=jointById(v);sync();}));
+  const valIn=dInput('0',v=>{const n=rot()?parseAng(v):parseLen(v);if(n!=null){setVal(n);}});
+  const valRow=dRow(d.body,'Rotation',valIn).closest('.dlg-row');
+  const slider=el('input',{type:'range'});
+  slider.style.cssText='width:100%';
+  slider.addEventListener('input',()=>setVal(parseFloat(slider.value)));
+  dRow(d.body,'',slider);
+  const stepsIn=dInput('60',()=>{});
+  dRow(d.body,'Steps',stepsIn);
+  const btns=el('div');btns.style.cssText='display:flex;gap:6px;align-items:center';
+  const mkBtn=(icon,title,fn)=>{const b=el('button','btn',IC(icon,'i16'));
+    b.title=title;b.style.cssText='padding:4px 10px';b.addEventListener('click',fn);return b;};
+  const loopBox=el('input',{type:'checkbox'});loopBox.checked=true;
+  btns.appendChild(mkBtn('skipStart','Reset',()=>{setVal(0);}));
+  btns.appendChild(mkBtn('play','Play',()=>play()));
+  btns.appendChild(mkBtn('pause','Pause',()=>stop()));
+  const lw=el('span','','Loop');lw.style.cssText='font-size:11px;color:var(--f-text-dim);margin-left:4px';
+  btns.appendChild(loopBox);btns.appendChild(lw);
+  dRow(d.body,'Animate',btns);
+  const readout=el('div','dlg-hint');d.body.appendChild(readout);
+  d.body.appendChild(el('div','dlg-hint','Drag the slider and every <b>linked</b> joint follows. This is the cheapest prototype you will ever build — a clamp that slips on screen never wastes four hours of printer time.'));
+  function setVal(n){
+    driveJoint(cur,n);
+    valIn.value=rot()?fmtNum(n)+' deg':fmtLen(n);
+    slider.value=String(n);
+    paintReadout();
+  }
+  function paintReadout(){
+    const bits=jointList().map(j=>j.name+': '+(j.type==='revolute'?fmtNum(j.value||0)+'°':fmtLen(j.value||0)));
+    readout.innerHTML=bits.join(' &nbsp;·&nbsp; ');
+  }
+  function sync(){
+    valRow.querySelector('.dr-label').textContent=rot()?'Rotation':'Distance';
+    slider.min=rot()?'-360':'-100';slider.max=rot()?'360':'100';
+    slider.step=rot()?'1':'0.1';
+    setVal(cur.value||0);
+  }
+  function play(){
+    stop();
+    const steps=Math.max(4,parseInt(stepsIn.value)||60);
+    const span=rot()?360:50;
+    let v=cur.value||0;
+    const tick=()=>{
+      v+=dir*(span/steps);
+      if(v>span){if(loopBox.checked){dir=-1;}else{stop();return;}}
+      if(v<(rot()?0:-span)){dir=1;}
+      setVal(v);
+      anim=requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  function stop(){if(anim){cancelAnimationFrame(anim);anim=null;}}
+  sync();
+  setPrompt('Drive Joints — drag the slider, or press play');
+}
+
+/* --------------------------------------------------------------- MOTION LINK */
+function cmdMotionLink(editLink){
+  const js=jointList().filter(j=>j.type==='revolute'||j.type==='slider');
+  if(js.length<2){toast('Motion Link needs two joints — a Revolute and a Slider','warn');return;}
+  const st=editLink?Object.assign({},editLink):{
+    id:uid(),name:'Motion Link'+(linkList().length+1),
+    j1:js[0].id,j2:js[1].id,
+    v1:js[0].type==='revolute'?360:62.8, v2:js[1].type==='revolute'?360:62.8, reverse:false};
+  const d=makeDialog({title:'Motion Link',icon:'patternCirc',x:innerWidth-350,y:100,
+    onOK(){
+      if(st.j1===st.j2){toast('Pick two different joints','warn');return false;}
+      if(!st.v1||!st.v2){toast('Both values must be non-zero','warn');return false;}
+      if(!editLink)linkList().push(st);else Object.assign(editLink,st);
+      buildBrowser();
+      toast('Motion Link — '+fmtNum(st.v1)+' ↔ '+fmtNum(st.v2));
+      return true;
+    }});
+  const lab=id=>{const j=jointById(id);return j?(j.type==='revolute'?'deg':'mm'):'';};
+  const u1=el('span','dh-x',lab(st.j1)),u2=el('span','dh-x',lab(st.j2));
+  dRow(d.body,'Joint 1',dSelect(js.map(j=>({v:j.id,label:j.name+'  ('+j.type+')'})),st.j1,v=>{
+    st.j1=v;u1.textContent=lab(v);hint();}));
+  const w1=el('div');w1.style.cssText='display:flex;gap:4px;align-items:center';
+  w1.appendChild(dInput(fmtNum(st.v1),v=>{const n=parseFloat(v);if(isFinite(n)){st.v1=n;hint();}}));w1.appendChild(u1);
+  dRow(d.body,'Value 1',w1);
+  dRow(d.body,'Joint 2',dSelect(js.map(j=>({v:j.id,label:j.name+'  ('+j.type+')'})),st.j2,v=>{
+    st.j2=v;u2.textContent=lab(v);hint();}));
+  const w2=el('div');w2.style.cssText='display:flex;gap:4px;align-items:center';
+  w2.appendChild(dInput(fmtNum(st.v2),v=>{const n=parseFloat(v);if(isFinite(n)){st.v2=n;hint();}}));w2.appendChild(u2);
+  dRow(d.body,'Value 2',w2);
+  const rev=el('input',{type:'checkbox'});rev.checked=!!st.reverse;
+  rev.addEventListener('change',()=>st.reverse=rev.checked);
+  dRow(d.body,'Reverse Direction',rev);
+  const h=el('div','dlg-hint');d.body.appendChild(h);
+  function hint(){
+    const a=jointById(st.j1),b=jointById(st.j2);
+    if(!a||!b){h.textContent='';return;}
+    let msg='One '+fmtNum(st.v1)+(a.type==='revolute'?'° of ':' mm of ')+a.name+' = '+fmtNum(st.v2)+(b.type==='revolute'?'°':' mm')+' of '+b.name+'.';
+    if(a.type==='revolute'&&b.type==='slider'&&Math.abs(st.v1-360)<1)
+      msg+=' A full turn rolls out one pitch circumference — π × Ø. Pitch Ø'+fmtNum(st.v2/Math.PI)+' gives this number.';
+    h.innerHTML=msg;
+  }
+  hint();
+  setPrompt('Motion Link — tie a turn of the pinion to a travel of the rack');
+}
+
+/* --------------------------------------------------- commands, ribbon, tree */
+COMMANDS.push(
+  {id:'spurGear',label:'Spur Gear',icon:'patternCirc',desc:'The SpurGear add-in — involute teeth from module, pressure angle and tooth count.',run:()=>cmdSpurGear()},
+  {id:'addIns',label:'Scripts and Add-Ins',key:'Shift+S',icon:'gear',desc:'Run a sample script. SpurGear builds a real involute gear.',run:()=>cmdAddIns()},
+  {id:'joint',label:'Joint',key:'J',icon:'joint',desc:'Give two bodies a degree of freedom — revolute, slider or rigid.',run:()=>cmdJoint()},
+  {id:'driveJoints',label:'Drive Joints',icon:'play',desc:'Drag a joint through its motion and watch linked joints follow.',run:()=>cmdDriveJoints()},
+  {id:'motionLink',label:'Motion Link',icon:'patternCirc',desc:'Tie two joints together — 360° of pinion to 62.8 mm of rack.',run:()=>cmdMotionLink()}
+);
+FeatureExec.spurGearEdit=null;
+const _origEditFeature=window.editFeatureDialog;
+
+// The ASSEMBLE panel of the real SOLID ribbon: its name band opens the menu, and a Joint
+// icon sits beside New Component, exactly where Fusion puts it.
+function assembleMenuItems(){return[
+  miDis('New Component','newComp','Components are a full-Fusion concept — Fusion Labs works in bodies.'),
+  mi('joint'),
+  miDis('As-built Joint','joint','Shown for authenticity — build it with Joint.'),
+  miDis('Joint Origin','pointIc'),
+  miDis('Rigid Group','combine'),
+  '-',mi('driveJoints'),mi('motionLink'),
+  miDis('Enable Contact Sets','combine'),
+  miDis('Motion Study','play','Motion Study plots a joint over time — Drive Joints animates it here.'),
+];}
+function wireAssemblePanel(){
+  const host=document.querySelector('#tools-row .fstrip');
+  if(!host)return;
+  const band=host.querySelector('.shot[data-group="assemble"]');
+  if(band&&!band.dataset.wired){
+    const fresh=band.cloneNode(true);          // drop the "not functional" handler
+    fresh.dataset.wired='1';
+    band.replaceWith(fresh);
+    fresh.title='ASSEMBLE menu';
+    fresh.addEventListener('click',ev=>{ev.stopPropagation();
+      if(window.FMENU)FMENU.close();
+      openMenu(fresh,assembleMenuItems());});
+  }
+  if(!host.querySelector('.shot[data-cmd="joint"]')){
+    const d=el('div','shot');
+    d.style.cssText='left:1172px;top:1px;width:28px;height:38px';
+    d.dataset.cmd='joint';d.title='Joint (J)';
+    d.addEventListener('click',ev=>{ev.stopPropagation();
+      if(window.FMENU)FMENU.close();runCmd('joint');});
+    host.appendChild(d);
+  }
+}
+const _activateTab=activateTab;
+activateTab=function(name){_activateTab(name);try{wireAssemblePanel();}catch(e){}};
+const _util=TAB_BUILDERS.utilities;
+TAB_BUILDERS.utilities=function(row){
+  _util(row);
+  const g=toolGroup('Add-Ins',[bigBtn('addIns'),bigBtn('spurGear')],()=>[
+    mi('addIns'),mi('spurGear'),miDis('Add-In Manager','gear'),
+  ]);
+  row.insertBefore(g,row.children[1]||null);
+  const ghosts=row.querySelectorAll('.tb-group');
+  ghosts.forEach(gr=>{const cap=gr.querySelector('.tb-group-cap');
+    if(cap&&/^Add-Ins/.test(cap.textContent)&&gr!==g)gr.remove();});
+};
+if(App.activeTab)activateTab(App.activeTab);
+
+// Shift+S — Scripts and Add-Ins, as in Fusion
+addEventListener('keydown',e=>{
+  if(!e.shiftKey||e.ctrlKey||e.metaKey)return;
+  if(String(e.key).toLowerCase()!=='s')return;
+  const ae=document.activeElement;
+  if(ae&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName))return;
+  e.preventDefault();e.stopPropagation();
+  cmdAddIns();
+},true);
+
+// Joints folder in the browser tree
+const _buildBrowser=buildBrowser;
+buildBrowser=function(){
+  _buildBrowser();
+  const body=$('#browser-body');if(!body)return;
+  const js=jointList(),ls=linkList();
+  if(!js.length&&!ls.length)return;
+  if(brOpen.joints===undefined)brOpen.joints=true;
+  const head=brRow(0,{icon:'joint',label:'Joints',caret:1,open:brOpen.joints,
+    onCaret:()=>{brOpen.joints=!brOpen.joints;buildBrowser();}});
+  body.appendChild(head);
+  if(!brOpen.joints)return;
+  js.forEach(j=>{
+    const r=brRow(1,{icon:'joint',label:j.name+'  ('+j.type+')',
+      onDel:()=>{Doc.joints=js.filter(x=>x!==j);
+        Doc.motionLinks=linkList().filter(L=>L.j1!==j.id&&L.j2!==j.id);
+        applyJointPoses();buildBrowser();}});
+    r.style.cursor='pointer';
+    r.addEventListener('dblclick',()=>cmdJoint(j));
+    body.appendChild(r);
+  });
+  ls.forEach(L=>{
+    const a=jointById(L.j1),b=jointById(L.j2);
+    const r=brRow(1,{icon:'patternCirc',label:L.name+'  ('+fmtNum(L.v1)+' ↔ '+fmtNum(L.v2)+')',
+      onDel:()=>{Doc.motionLinks=ls.filter(x=>x!==L);buildBrowser();}});
+    r.style.cursor='pointer';
+    r.addEventListener('dblclick',()=>cmdMotionLink(L));
+    body.appendChild(r);
+  });
+};
+window.cmdSpurGear=cmdSpurGear;window.cmdJoint=cmdJoint;
+window.cmdDriveJoints=cmdDriveJoints;window.cmdMotionLink=cmdMotionLink;window.cmdAddIns=cmdAddIns;
+window.spurGearProfile=spurGearProfile;
+})();
+</script>
 </body>
 </html>
